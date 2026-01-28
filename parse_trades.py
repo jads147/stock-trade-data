@@ -209,6 +209,9 @@ def generate_html(transactions: list[Transaction], output_path: str):
             volume_by_month[month_key]["verkauf"] += abs(t.betrag)
         volume_by_month[month_key]["count"] += 1
 
+    # P&L per month (will be calculated after pnl_events are generated)
+    pnl_by_month = defaultdict(float)
+
     # Volume per weekday (0=Monday, 6=Sunday)
     volume_by_weekday = defaultdict(lambda: {"kauf": 0.0, "verkauf": 0.0, "count": 0})
     weekday_names = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
@@ -843,6 +846,9 @@ def generate_html(transactions: list[Transaction], output_path: str):
             "type": event["type"],
             "name": event["name"]
         })
+        # Aggregate P&L by month
+        month_key = event["date"].strftime("%Y-%m")
+        pnl_by_month[month_key] += event["pnl"]
 
     # Generate scatter plot data for closed positions
     scatter_data_pct = []
@@ -871,7 +877,8 @@ def generate_html(transactions: list[Transaction], output_path: str):
         "labels": sorted_months,
         "kauf": [round(volume_by_month[m]["kauf"], 2) for m in sorted_months],
         "verkauf": [round(volume_by_month[m]["verkauf"], 2) for m in sorted_months],
-        "count": [volume_by_month[m]["count"] for m in sorted_months]
+        "count": [volume_by_month[m]["count"] for m in sorted_months],
+        "pnl": [round(pnl_by_month[m], 2) for m in sorted_months]
     }
 
     volume_weekday_data = {
@@ -886,10 +893,36 @@ def generate_html(transactions: list[Transaction], output_path: str):
         const volumeMonthData = {json.dumps(volume_month_data)};
         const volumeWeekdayData = {json.dumps(volume_weekday_data)};
 
+        // Plugin to draw P&L under x-axis labels
+        const pnlLabelPlugin = {{
+            id: 'pnlLabels',
+            afterDraw: function(chart) {{
+                const ctx = chart.ctx;
+                const xAxis = chart.scales.x;
+                const yAxis = chart.scales.y;
+
+                ctx.save();
+                ctx.font = '10px -apple-system, BlinkMacSystemFont, sans-serif';
+                ctx.textAlign = 'center';
+
+                volumeMonthData.pnl.forEach((pnl, i) => {{
+                    const x = xAxis.getPixelForValue(i);
+                    const y = yAxis.bottom + 32;
+
+                    ctx.fillStyle = pnl >= 0 ? '#10b981' : '#ef4444';
+                    const sign = pnl >= 0 ? '+' : '';
+                    ctx.fillText(sign + pnl.toLocaleString('de-DE') + '€', x, y);
+                }});
+
+                ctx.restore();
+            }}
+        }};
+
         // Volume per Month Chart
         const volumeMonthCtx = document.getElementById('volumeMonthChart').getContext('2d');
         const volumeMonthChart = new Chart(volumeMonthCtx, {{
             type: 'bar',
+            plugins: [pnlLabelPlugin],
             data: {{
                 labels: volumeMonthData.labels.map(m => {{
                     const [year, month] = m.split('-');
@@ -916,6 +949,9 @@ def generate_html(transactions: list[Transaction], output_path: str):
             options: {{
                 responsive: true,
                 maintainAspectRatio: false,
+                layout: {{
+                    padding: {{ bottom: 20 }}
+                }},
                 plugins: {{
                     legend: {{
                         display: true,
@@ -925,7 +961,7 @@ def generate_html(transactions: list[Transaction], output_path: str):
                         callbacks: {{
                             afterBody: function(context) {{
                                 const idx = context[0].dataIndex;
-                                return 'Trades: ' + volumeMonthData.count[idx];
+                                return ['Trades: ' + volumeMonthData.count[idx], 'P&L: ' + (volumeMonthData.pnl[idx] >= 0 ? '+' : '') + volumeMonthData.pnl[idx].toLocaleString('de-DE') + ' €'];
                             }}
                         }}
                     }}

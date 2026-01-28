@@ -2649,13 +2649,39 @@
         });
 
         // Volume Charts
-        const volumeMonthData = {"labels": ["2025-03", "2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01"], "kauf": [1186.91, 16252.26, 170365.86, 7514.7, 5069.7, 1641.09, 0.0, 1819.5, 153.3, 0.0, 2075.29], "verkauf": [186.3, 13222.67, 174514.01, 2231.21, 4933.23, 1778.81, 478.27, 2011.35, 1191.15, 485.04, 504.82], "count": [7, 29, 93, 30, 22, 6, 1, 18, 3, 1, 4]};
+        const volumeMonthData = {"labels": ["2025-03", "2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01"], "kauf": [1186.91, 16252.26, 170365.86, 7514.7, 5069.7, 1641.09, 0.0, 1819.5, 153.3, 0.0, 2075.29], "verkauf": [186.3, 13222.67, 174514.01, 2231.21, 4933.23, 1778.81, 478.27, 2011.35, 1191.15, 485.04, 504.82], "count": [7, 29, 93, 30, 22, 6, 1, 18, 3, 1, 4], "pnl": [-3.18, -207.38, 575.14, 15.61, 295.78, 65.12, -48.75, -38.15, 74.76, 63.58, 10.27]};
         const volumeWeekdayData = {"labels": ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"], "kauf": [29881.23, 46935.87, 28593.02, 44928.19, 55740.3, 0.0, 0.0], "verkauf": [31925.21, 42560.29, 22660.48, 47105.33, 57285.55, 0.0, 0.0], "count": [59, 45, 31, 41, 38, 0, 0]};
+
+        // Plugin to draw P&L under x-axis labels
+        const pnlLabelPlugin = {
+            id: 'pnlLabels',
+            afterDraw: function(chart) {
+                const ctx = chart.ctx;
+                const xAxis = chart.scales.x;
+                const yAxis = chart.scales.y;
+
+                ctx.save();
+                ctx.font = '10px -apple-system, BlinkMacSystemFont, sans-serif';
+                ctx.textAlign = 'center';
+
+                volumeMonthData.pnl.forEach((pnl, i) => {
+                    const x = xAxis.getPixelForValue(i);
+                    const y = yAxis.bottom + 32;
+
+                    ctx.fillStyle = pnl >= 0 ? '#10b981' : '#ef4444';
+                    const sign = pnl >= 0 ? '+' : '';
+                    ctx.fillText(sign + pnl.toLocaleString('de-DE') + '€', x, y);
+                });
+
+                ctx.restore();
+            }
+        };
 
         // Volume per Month Chart
         const volumeMonthCtx = document.getElementById('volumeMonthChart').getContext('2d');
         const volumeMonthChart = new Chart(volumeMonthCtx, {
             type: 'bar',
+            plugins: [pnlLabelPlugin],
             data: {
                 labels: volumeMonthData.labels.map(m => {
                     const [year, month] = m.split('-');
@@ -2682,6 +2708,9 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                layout: {
+                    padding: { bottom: 20 }
+                },
                 plugins: {
                     legend: {
                         display: true,
@@ -2691,7 +2720,7 @@
                         callbacks: {
                             afterBody: function(context) {
                                 const idx = context[0].dataIndex;
-                                return 'Trades: ' + volumeMonthData.count[idx];
+                                return ['Trades: ' + volumeMonthData.count[idx], 'P&L: ' + (volumeMonthData.pnl[idx] >= 0 ? '+' : '') + volumeMonthData.pnl[idx].toLocaleString('de-DE') + ' €'];
                             }
                         }
                     }
