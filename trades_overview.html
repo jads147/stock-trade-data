@@ -221,7 +221,7 @@
             </div>
             <div class="stat-card">
                 <div class="stat-label">Realisierte P&L</div>
-                <div class="stat-value positive">+612,25 €</div>
+                <div class="stat-value positive">+802,80 €</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">Investiert (offen)</div>
@@ -2544,6 +2544,13 @@
         </div>
 
         <div class="section">
+            <h2>📈 P&L Über Zeit</h2>
+            <div class="chart-container" style="height: 450px;">
+                <canvas id="pnlOverTimeChart"></canvas>
+            </div>
+        </div>
+
+        <div class="section">
             <h2>📊 Trade Visualisierung - Geschlossene Positionen</h2>
             <div class="chart-grid">
                 <div>
@@ -2607,6 +2614,85 @@
 
                 rows.forEach(row => tbody.appendChild(row));
             });
+        });
+
+        // P&L Over Time Chart
+        const pnlTimeline = [{"date": "2025-03-24", "cumulative": -3.18, "change": -3.18, "type": "Trade", "name": "HSBC T+B TURBOC N100      3438"}, {"date": "2025-04-01", "cumulative": -1.24, "change": 1.94, "type": "Trade", "name": "NVIDIA CORP. DL-,001"}, {"date": "2025-04-07", "cumulative": -9.55, "change": -8.31, "type": "Trade", "name": "HSBC T+B INTRAD           AIUQ"}, {"date": "2025-04-10", "cumulative": -9.59, "change": -0.04, "type": "Trade", "name": "UBS TURBOP N100           1256"}, {"date": "2025-04-15", "cumulative": -198.68, "change": -189.09, "type": "Trade", "name": "UBS TURBOC N100           0406"}, {"date": "2025-04-24", "cumulative": -193.39, "change": 5.29, "type": "Trade", "name": "WITR MU.AS.I.RUSS.ETP2062"}, {"date": "2025-04-28", "cumulative": -220.59, "change": -27.2, "type": "Trade", "name": "WITR MU.AS.I. ETP 62      0011"}, {"date": "2025-04-28", "cumulative": -218.82, "change": 1.77, "type": "Trade", "name": "WITR MU.AS.I. ETP 62      0011"}, {"date": "2025-04-29", "cumulative": -250.32, "change": -31.5, "type": "Trade", "name": "AMUNDI ETF LEV. USA"}, {"date": "2025-04-29", "cumulative": -184.52, "change": 65.8, "type": "Trade", "name": "WITR MU.AS.I. ETP 62      0011"}, {"date": "2025-04-30", "cumulative": -158.75, "change": 25.77, "type": "Trade", "name": "VANG.FTSE A.W. DLA"}, {"date": "2025-04-30", "cumulative": -186.49, "change": -27.74, "type": "Trade", "name": "MS CO.I. TURBOL SX5E      0182"}, {"date": "2025-04-30", "cumulative": -215.99, "change": -29.5, "type": "Trade", "name": "ISHSIII-CORE MSCI WLD DLA"}, {"date": "2025-04-30", "cumulative": -200.96, "change": 15.02, "type": "Trade", "name": "VANG.FTSE A.W. DLA"}, {"date": "2025-04-30", "cumulative": -210.56, "change": -9.6, "type": "Trade", "name": "AMUNDI ETF LEV. USA"}, {"date": "2025-05-02", "cumulative": -104.37, "change": 106.19, "type": "Trade", "name": "WITR MU.AS.I. ETP 62      0011"}, {"date": "2025-05-02", "cumulative": -29.45, "change": 74.92, "type": "Trade", "name": "AMUNDI ETF LEV. USA"}, {"date": "2025-05-02", "cumulative": -2.17, "change": 27.28, "type": "Trade", "name": "AMUNDI ETF LEV. USA"}, {"date": "2025-05-05", "cumulative": -3.07, "change": -0.9, "type": "Trade", "name": "BERKSH. H.B NEW DL-,00333"}, {"date": "2025-05-06", "cumulative": -1.44, "change": 1.63, "type": "Trade", "name": "VANG.FTSE A.W. DLA"}, {"date": "2025-05-06", "cumulative": -12.82, "change": -11.38, "type": "Trade", "name": "AMUNDI I.S.-A.PR.UE DREOA"}, {"date": "2025-05-06", "cumulative": -41.02, "change": -28.2, "type": "Trade", "name": "AMUNDI ETF LEV. USA"}, {"date": "2025-05-06", "cumulative": -57.18, "change": -16.16, "type": "Trade", "name": "MUF-AMU.EOSTXX50 2XLEV.AC"}, {"date": "2025-05-06", "cumulative": -65.34, "change": -8.16, "type": "Trade", "name": "AIS-AM.PRIME EM DR UNHDLA"}, {"date": "2025-05-08", "cumulative": -76.36, "change": -11.02, "type": "Trade", "name": "WITR MU.AS.I. ETP 62      0011"}, {"date": "2025-05-13", "cumulative": 209.17, "change": 285.53, "type": "Trade", "name": "AMUNDI ETF LEV. USA"}, {"date": "2025-05-15", "cumulative": 501.31, "change": 292.14, "type": "Trade", "name": "WITR MU.AS.I. ETP 62      0011"}, {"date": "2025-05-15", "cumulative": 512.76, "change": 11.45, "type": "Trade", "name": "MUF-AMU.EOSTXX50 2XLEV.AC"}, {"date": "2025-05-15", "cumulative": 523.38, "change": 10.62, "type": "Trade", "name": "MUL AMUN LEVDAX ETF ACC"}, {"date": "2025-05-16", "cumulative": 516.88, "change": -6.5, "type": "Trade", "name": "UNITEDHEALTH GROUP DL-,01"}, {"date": "2025-05-16", "cumulative": 511.33, "change": -5.55, "type": "Trade", "name": "MUL AMUN LEVDAX ETF ACC"}, {"date": "2025-05-16", "cumulative": 516.46, "change": 5.13, "type": "Trade", "name": "HSBC T+B TURBOC UNH       0174"}, {"date": "2025-05-16", "cumulative": 516.74, "change": 0.28, "type": "Steuerausgleich", "name": "Steuerausgleich"}, {"date": "2025-05-19", "cumulative": 515.94, "change": -0.8, "type": "Trade", "name": "MS CO.I. CALL25 XAU       0077"}, {"date": "2025-05-19", "cumulative": 467.34, "change": -48.6, "type": "Trade", "name": "MUL AMUN LEVDAX ETF ACC"}, {"date": "2025-05-19", "cumulative": 629.89, "change": 162.55, "type": "Trade", "name": "VONT.FINL PR CALL25 N100  0358"}, {"date": "2025-05-19", "cumulative": 620.49, "change": -9.4, "type": "Trade", "name": "ALPHABET INC.CL.C DL-,001"}, {"date": "2025-05-19", "cumulative": 590.57, "change": -29.92, "type": "Trade", "name": "VONT.FINL PR CALL25 N100  0358"}, {"date": "2025-05-19", "cumulative": 598.94, "change": 8.37, "type": "Steuerausgleich", "name": "Steuerausgleich"}, {"date": "2025-05-20", "cumulative": 612.29, "change": 13.35, "type": "Trade", "name": "VONT.FINL PR CALL25 DAX   0684"}, {"date": "2025-05-20", "cumulative": 647.19, "change": 34.9, "type": "Trade", "name": "VONT.FINL PR CALL25 DAX   0685"}, {"date": "2025-05-21", "cumulative": 945.1, "change": 297.91, "type": "Trade", "name": "VONT.FINL PR CALL25 ABEA  0053"}, {"date": "2025-05-21", "cumulative": 972.65, "change": 27.55, "type": "Trade", "name": "HSBC T+B CALL27 ABEA"}, {"date": "2025-05-21", "cumulative": 937.57, "change": -35.08, "type": "Trade", "name": "VONT.FINL PR CALL25 ABEA  0053"}, {"date": "2025-05-21", "cumulative": 742.45, "change": -195.12, "type": "Trade", "name": "VONT.FINL PR CALL25 ABEA  0053"}, {"date": "2025-05-21", "cumulative": 806.88, "change": 64.43, "type": "Steuerausgleich", "name": "Steuerausgleich"}, {"date": "2025-05-22", "cumulative": 806.11, "change": -0.77, "type": "Trade", "name": "VONT.FINL PR MINIL DAX    0328"}, {"date": "2025-05-22", "cumulative": 773.03, "change": -33.08, "type": "Trade", "name": "GOLDM.S.BK CALL26 DAX     0024"}, {"date": "2025-05-22", "cumulative": 751.48, "change": -21.55, "type": "Trade", "name": "MS CO.I. CALL26 ABEA      0037"}, {"date": "2025-05-22", "cumulative": 767.06, "change": 15.58, "type": "Trade", "name": "GOLDM.S.BK CALL26 DAX     0024"}, {"date": "2025-05-22", "cumulative": 770.36, "change": 3.3, "type": "Trade", "name": "GOLDM.S.BK CALL26 DAX     0024"}, {"date": "2025-05-22", "cumulative": 780.58, "change": 10.22, "type": "Steuerausgleich", "name": "Steuerausgleich"}, {"date": "2025-05-23", "cumulative": 784.77, "change": 4.19, "type": "Trade", "name": "GOLDM.S.BK CALL26 DAX     0024"}, {"date": "2025-05-23", "cumulative": 764.03, "change": -20.74, "type": "Trade", "name": "MS CO.I. CALL26 ABEA      0037"}, {"date": "2025-05-23", "cumulative": 720.03, "change": -44.0, "type": "Trade", "name": "GOLDM.S.BK CALL26 DAX     0024"}, {"date": "2025-05-23", "cumulative": 447.81, "change": -272.22, "type": "Trade", "name": "GOLDM.S.BK CALL26 DAX     0024"}, {"date": "2025-05-23", "cumulative": 453.39, "change": 5.58, "type": "Trade", "name": "MS CO.I. CALL25 XAU       0077"}, {"date": "2025-05-23", "cumulative": 453.39, "change": 0.0, "type": "Trade", "name": "MS CO.I. CALL26 ABEA      0023"}, {"date": "2025-05-23", "cumulative": 410.19, "change": -43.2, "type": "Trade", "name": "MS CO.I. CALL26 ABEA      0023"}, {"date": "2025-05-23", "cumulative": 314.05, "change": -96.14, "type": "Trade", "name": "VONT.FINL PR CALL25 ABEA  0053"}, {"date": "2025-05-23", "cumulative": 266.17, "change": -47.88, "type": "Trade", "name": "GOLDM.S.BK CALL26 DAX     0024"}, {"date": "2025-05-23", "cumulative": 411.35, "change": 145.18, "type": "Steuerausgleich", "name": "Steuerausgleich"}, {"date": "2025-05-26", "cumulative": 396.9, "change": -14.45, "type": "Trade", "name": "MS CO.I. CALL25 ABEA      0055"}, {"date": "2025-05-26", "cumulative": 398.1, "change": 1.2, "type": "Trade", "name": "VONT.FINL PR TURBOC N100  0101"}, {"date": "2025-05-26", "cumulative": 401.8, "change": 3.7, "type": "Steuerausgleich", "name": "Steuerausgleich"}, {"date": "2025-05-27", "cumulative": 401.8, "change": 0.0, "type": "Trade", "name": "MS CO.I. CALL25 ABEA      0055"}, {"date": "2025-05-27", "cumulative": 391.33, "change": -10.47, "type": "Trade", "name": "VONT.FINL PR TURBOC ABEA  0091"}, {"date": "2025-05-27", "cumulative": 389.33, "change": -2.0, "type": "Trade", "name": "UBS TURBOC25 N100         0242"}, {"date": "2025-05-27", "cumulative": 350.13, "change": -39.2, "type": "Trade", "name": "HSBC T+B TURBOC ABEA      0039"}, {"date": "2025-05-27", "cumulative": 364.58, "change": 14.45, "type": "Steuerausgleich", "name": "Steuerausgleich"}, {"date": "2025-06-05", "cumulative": 365.57, "change": 0.99, "type": "Trade", "name": "ISHARES PHYS.MET.O.END ZT"}, {"date": "2025-06-05", "cumulative": 367.76, "change": 2.19, "type": "Trade", "name": "ISHARES PHYS.MET.O.END ZT 0001"}, {"date": "2025-06-05", "cumulative": 383.81, "change": 16.05, "type": "Trade", "name": "VONT.FINL PR TURBOC ABEA  0101"}, {"date": "2025-06-09", "cumulative": 378.81, "change": -5.0, "type": "Trade", "name": "MS CO.I. TURBOL ABEA      0107"}, {"date": "2025-06-09", "cumulative": 380.19, "change": 1.38, "type": "Steuerausgleich", "name": "Steuerausgleich"}, {"date": "2025-07-15", "cumulative": 350.87, "change": -29.32, "type": "Trade", "name": "MS CO.I. CALL25 ABEA      0067"}, {"date": "2025-07-15", "cumulative": 360.24, "change": 9.37, "type": "Trade", "name": "MS CO.I. CALL25 DAX       0258"}, {"date": "2025-07-15", "cumulative": 391.04, "change": 30.8, "type": "Trade", "name": "CANAAN INC SP.ADR CL.A"}, {"date": "2025-07-15", "cumulative": 400.61, "change": 9.57, "type": "Trade", "name": "SPDR MSCI ACW IM ETF"}, {"date": "2025-07-17", "cumulative": 399.83, "change": -0.78, "type": "Trade", "name": "MUL AMUN LEVDAX ETF ACC"}, {"date": "2025-07-17", "cumulative": 412.47, "change": 12.64, "type": "Trade", "name": "GOLDM.S.BK CALL26 DAX     0124"}, {"date": "2025-07-18", "cumulative": 407.91, "change": -4.56, "type": "Trade", "name": "HSBC T+B CALL27 N100      0017"}, {"date": "2025-07-18", "cumulative": 409.17, "change": 1.26, "type": "Steuerausgleich", "name": "Steuerausgleich"}, {"date": "2025-07-22", "cumulative": 599.99, "change": 190.82, "type": "Trade", "name": "HSBC T+B CALL26 ABEA      0007"}, {"date": "2025-07-24", "cumulative": 675.97, "change": 75.98, "type": "Trade", "name": "MS CO.I. CALL26 ABEA      0023"}, {"date": "2025-08-11", "cumulative": 684.26, "change": 8.29, "type": "Trade", "name": "GOLDM.S.BK CALL25 NOV     0107"}, {"date": "2025-08-11", "cumulative": 788.68, "change": 104.42, "type": "Trade", "name": "VONT.FINL PR CALL26 ABEA  0015"}, {"date": "2025-08-28", "cumulative": 722.6, "change": -66.08, "type": "Trade", "name": "GOLDM.S.BK CALL26 DAX     0124"}, {"date": "2025-08-28", "cumulative": 741.09, "change": 18.49, "type": "Steuerausgleich", "name": "Steuerausgleich"}, {"date": "2025-09-16", "cumulative": 741.88, "change": 0.79, "type": "Dividende", "name": "US02079K3059"}, {"date": "2025-09-29", "cumulative": 673.11, "change": -68.77, "type": "Trade", "name": "GOLDM.S.BK CALL27 DAX     0023"}, {"date": "2025-09-29", "cumulative": 692.34, "change": 19.23, "type": "Steuerausgleich", "name": "Steuerausgleich"}, {"date": "2025-10-09", "cumulative": 679.38, "change": -12.96, "type": "Trade", "name": "BITCOIN GROUP SE O.N."}, {"date": "2025-10-09", "cumulative": 683.0, "change": 3.62, "type": "Steuerausgleich", "name": "Steuerausgleich"}, {"date": "2025-10-13", "cumulative": 679.62, "change": -3.38, "type": "Trade", "name": "MUL AMUN LEVDAX ETF ACC"}, {"date": "2025-10-13", "cumulative": 680.57, "change": 0.95, "type": "Steuerausgleich", "name": "Steuerausgleich"}, {"date": "2025-10-14", "cumulative": 620.07, "change": -60.5, "type": "Trade", "name": "VONT.FINL PR CALL25 2PP   0077"}, {"date": "2025-10-14", "cumulative": 589.32, "change": -30.75, "type": "Trade", "name": "GOLDM.S.BK CALL25 R3NK    0004"}, {"date": "2025-10-14", "cumulative": 614.85, "change": 25.53, "type": "Steuerausgleich", "name": "Steuerausgleich"}, {"date": "2025-10-16", "cumulative": 650.87, "change": 36.02, "type": "Trade", "name": "HSBC T+B TURBOC ABEA      0673"}, {"date": "2025-10-17", "cumulative": 657.36, "change": 6.49, "type": "Trade", "name": "HSBC T+B TURBOC ABEA      0763"}, {"date": "2025-10-20", "cumulative": 622.86, "change": -34.5, "type": "Trade", "name": "HSBC T+B TURBOC SAP       0805"}, {"date": "2025-10-20", "cumulative": 632.51, "change": 9.65, "type": "Steuerausgleich", "name": "Steuerausgleich"}, {"date": "2025-10-27", "cumulative": 596.37, "change": -36.14, "type": "Trade", "name": "HSBC T+B TURBO            0113"}, {"date": "2025-10-27", "cumulative": 606.48, "change": 10.11, "type": "Steuerausgleich", "name": "Steuerausgleich"}, {"date": "2025-10-29", "cumulative": 654.19, "change": 47.71, "type": "Trade", "name": "ISHSIII-M.W.S.C.U.ETF DLA"}, {"date": "2025-11-03", "cumulative": 678.14, "change": 23.95, "type": "Trade", "name": "AMUNDI I.S.-A.PR.UE DREOA"}, {"date": "2025-11-25", "cumulative": 728.95, "change": 50.81, "type": "Trade", "name": "AM E.I.A.M.U.E. DLA"}, {"date": "2025-12-10", "cumulative": 791.75, "change": 62.8, "type": "Trade", "name": "AMUNDI ETF LEV. USA"}, {"date": "2025-12-17", "cumulative": 792.53, "change": 0.78, "type": "Dividende", "name": "US02079K3059"}, {"date": "2026-01-26", "cumulative": 802.8, "change": 10.27, "type": "Trade", "name": "ISHSIII-M.W.S.C.U.ETF DLA"}];
+
+        const pnlCtx = document.getElementById('pnlOverTimeChart').getContext('2d');
+        new Chart(pnlCtx, {
+            type: 'line',
+            data: {
+                labels: pnlTimeline.map(d => d.date),
+                datasets: [{
+                    label: 'Kumulierte P&L',
+                    data: pnlTimeline.map(d => d.cumulative),
+                    borderColor: '#00d4ff',
+                    backgroundColor: 'rgba(0, 212, 255, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.1,
+                    pointRadius: 6,
+                    pointHoverRadius: 10,
+                    pointBackgroundColor: pnlTimeline.map(d => d.change >= 0 ? '#10b981' : '#ef4444'),
+                    pointBorderColor: pnlTimeline.map(d => d.change >= 0 ? '#10b981' : '#ef4444'),
+                    pointBorderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            title: function(context) {
+                                const idx = context[0].dataIndex;
+                                const d = pnlTimeline[idx];
+                                const date = new Date(d.date);
+                                return date.toLocaleDateString('de-DE');
+                            },
+                            label: function(context) {
+                                const idx = context.dataIndex;
+                                const d = pnlTimeline[idx];
+                                return [
+                                    d.type + ': ' + d.name,
+                                    'Änderung: ' + (d.change >= 0 ? '+' : '') + d.change.toLocaleString('de-DE') + ' €',
+                                    'Kumuliert: ' + (d.cumulative >= 0 ? '+' : '') + d.cumulative.toLocaleString('de-DE') + ' €'
+                                ];
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'category',
+                        title: { display: true, text: 'Datum', color: '#888' },
+                        ticks: {
+                            color: '#666',
+                            maxRotation: 45,
+                            minRotation: 45,
+                            callback: function(value, index) {
+                                const date = new Date(pnlTimeline[index].date);
+                                return date.toLocaleDateString('de-DE', { month: 'short', year: '2-digit' });
+                            }
+                        },
+                        grid: { color: 'rgba(255,255,255,0.05)' }
+                    },
+                    y: {
+                        title: { display: true, text: 'Kumulierte P&L (€)', color: '#888' },
+                        ticks: {
+                            color: '#666',
+                            callback: function(value) { return value.toLocaleString('de-DE') + ' €'; }
+                        },
+                        grid: { color: 'rgba(255,255,255,0.05)' }
+                    }
+                }
+            }
         });
 
         // Chart.js configuration - Scatter plots

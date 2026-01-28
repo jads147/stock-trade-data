@@ -271,10 +271,29 @@ def generate_html(transactions: list[Transaction], output_path: str):
     closed_positions.sort(key=lambda x: x["pnl"], reverse=True)
     open_positions.sort(key=lambda x: x.get("invested", 0), reverse=True)
 
-    # Calculate totals
-    total_realized_pnl = sum(p["pnl"] for p in closed_positions)
-    total_realized_pnl += sum(p.get("realized_pnl", 0) for p in open_positions)
-    total_realized_pnl += total_steuerausgleich + total_dividenden
+    # Calculate totals using average cost basis (same method as P&L chart)
+    cost_basis_calc = {}
+    sorted_trades = sorted(trades, key=lambda t: t.datum)
+    total_trade_pnl = 0.0
+
+    for t in sorted_trades:
+        if not t.isin:
+            continue
+        if t.isin not in cost_basis_calc:
+            cost_basis_calc[t.isin] = {"cost": 0.0, "stueck": 0.0}
+        basis = cost_basis_calc[t.isin]
+
+        if t.is_kauf:
+            basis["cost"] += abs(t.betrag)
+            basis["stueck"] += t.stueck
+        elif t.is_verkauf and t.stueck > 0 and basis["stueck"] > 0:
+            avg_cost = basis["cost"] / basis["stueck"]
+            cost_of_sold = avg_cost * t.stueck
+            total_trade_pnl += t.betrag - cost_of_sold
+            basis["cost"] -= cost_of_sold
+            basis["stueck"] -= t.stueck
+
+    total_realized_pnl = total_trade_pnl + total_steuerausgleich + total_dividenden
     total_invested_open = sum(p.get("invested", 0) for p in open_positions)
 
     html = f"""<!DOCTYPE html>
@@ -623,6 +642,13 @@ def generate_html(transactions: list[Transaction], output_path: str):
         </div>
 
         <div class="section">
+            <h2>📈 P&L Über Zeit</h2>
+            <div class="chart-container" style="height: 450px;">
+                <canvas id="pnlOverTimeChart"></canvas>
+            </div>
+        </div>
+
+        <div class="section">
             <h2>📊 Trade Visualisierung - Geschlossene Positionen</h2>
             <div class="chart-grid">
                 <div>
@@ -689,6 +715,78 @@ def generate_html(transactions: list[Transaction], output_path: str):
         });
 """
 
+    # Generate P&L over time data - calculate from individual sales using average cost basis
+    pnl_events = []
+
+    # Build cost basis per ISIN and calculate P&L for each sale
+    cost_basis_by_isin = {}  # ISIN -> {"total_cost": float, "total_stueck": float}
+
+    # Collect all trade transactions and sort by date
+    all_trade_transactions = sorted(trades, key=lambda t: t.datum)
+
+    for t in all_trade_transactions:
+        if not t.isin:
+            continue
+
+        if t.isin not in cost_basis_by_isin:
+            cost_basis_by_isin[t.isin] = {"total_cost": 0.0, "total_stueck": 0.0, "name": t.name}
+
+        basis = cost_basis_by_isin[t.isin]
+
+        if t.is_kauf:
+            # Add to cost basis (betrag is negative for purchases)
+            basis["total_cost"] += abs(t.betrag)
+            basis["total_stueck"] += t.stueck
+        elif t.is_verkauf and t.stueck > 0:
+            # Calculate realized P&L for this sale
+            if basis["total_stueck"] > 0:
+                avg_cost_per_unit = basis["total_cost"] / basis["total_stueck"]
+                cost_of_sold = avg_cost_per_unit * t.stueck
+                realized_pnl = t.betrag - cost_of_sold  # betrag is positive for sales
+
+                pnl_events.append({
+                    "date": t.datum,
+                    "pnl": realized_pnl,
+                    "type": "Trade",
+                    "name": basis["name"][:30]
+                })
+
+                # Reduce cost basis
+                basis["total_cost"] -= cost_of_sold
+                basis["total_stueck"] -= t.stueck
+
+    # Add dividends
+    for t in dividenden:
+        pnl_events.append({
+            "date": t.datum,
+            "pnl": t.betrag,
+            "type": "Dividende",
+            "name": t.isin or "Dividende"
+        })
+
+    # Add steuerausgleich
+    for t in steuerausgleich:
+        pnl_events.append({
+            "date": t.datum,
+            "pnl": t.betrag,
+            "type": "Steuerausgleich",
+            "name": "Steuerausgleich"
+        })
+
+    # Sort by date and calculate cumulative P&L
+    pnl_events.sort(key=lambda x: x["date"])
+    cumulative_pnl = 0
+    pnl_timeline = []
+    for event in pnl_events:
+        cumulative_pnl += event["pnl"]
+        pnl_timeline.append({
+            "date": event["date"].strftime("%Y-%m-%d"),
+            "cumulative": round(cumulative_pnl, 2),
+            "change": round(event["pnl"], 2),
+            "type": event["type"],
+            "name": event["name"]
+        })
+
     # Generate scatter plot data for closed positions
     scatter_data_pct = []
     scatter_data_euro = []
@@ -711,6 +809,85 @@ def generate_html(transactions: list[Transaction], output_path: str):
         })
 
     html += f"""
+        // P&L Over Time Chart
+        const pnlTimeline = {json.dumps(pnl_timeline)};
+
+        const pnlCtx = document.getElementById('pnlOverTimeChart').getContext('2d');
+        new Chart(pnlCtx, {{
+            type: 'line',
+            data: {{
+                labels: pnlTimeline.map(d => d.date),
+                datasets: [{{
+                    label: 'Kumulierte P&L',
+                    data: pnlTimeline.map(d => d.cumulative),
+                    borderColor: '#00d4ff',
+                    backgroundColor: 'rgba(0, 212, 255, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.1,
+                    pointRadius: 6,
+                    pointHoverRadius: 10,
+                    pointBackgroundColor: pnlTimeline.map(d => d.change >= 0 ? '#10b981' : '#ef4444'),
+                    pointBorderColor: pnlTimeline.map(d => d.change >= 0 ? '#10b981' : '#ef4444'),
+                    pointBorderWidth: 2
+                }}]
+            }},
+            options: {{
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {{
+                    intersect: false,
+                    mode: 'index'
+                }},
+                plugins: {{
+                    legend: {{ display: false }},
+                    tooltip: {{
+                        callbacks: {{
+                            title: function(context) {{
+                                const idx = context[0].dataIndex;
+                                const d = pnlTimeline[idx];
+                                const date = new Date(d.date);
+                                return date.toLocaleDateString('de-DE');
+                            }},
+                            label: function(context) {{
+                                const idx = context.dataIndex;
+                                const d = pnlTimeline[idx];
+                                return [
+                                    d.type + ': ' + d.name,
+                                    'Änderung: ' + (d.change >= 0 ? '+' : '') + d.change.toLocaleString('de-DE') + ' €',
+                                    'Kumuliert: ' + (d.cumulative >= 0 ? '+' : '') + d.cumulative.toLocaleString('de-DE') + ' €'
+                                ];
+                            }}
+                        }}
+                    }}
+                }},
+                scales: {{
+                    x: {{
+                        type: 'category',
+                        title: {{ display: true, text: 'Datum', color: '#888' }},
+                        ticks: {{
+                            color: '#666',
+                            maxRotation: 45,
+                            minRotation: 45,
+                            callback: function(value, index) {{
+                                const date = new Date(pnlTimeline[index].date);
+                                return date.toLocaleDateString('de-DE', {{ month: 'short', year: '2-digit' }});
+                            }}
+                        }},
+                        grid: {{ color: 'rgba(255,255,255,0.05)' }}
+                    }},
+                    y: {{
+                        title: {{ display: true, text: 'Kumulierte P&L (€)', color: '#888' }},
+                        ticks: {{
+                            color: '#666',
+                            callback: function(value) {{ return value.toLocaleString('de-DE') + ' €'; }}
+                        }},
+                        grid: {{ color: 'rgba(255,255,255,0.05)' }}
+                    }}
+                }}
+            }}
+        }});
+
         // Chart.js configuration - Scatter plots
         const scatterDataPct = {json.dumps(scatter_data_pct)};
         const scatterDataEuro = {json.dumps(scatter_data_euro)};
