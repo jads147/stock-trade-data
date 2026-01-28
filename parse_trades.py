@@ -6,6 +6,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+try:
+    import pdfplumber
+    PDF_SUPPORT = True
+except ImportError:
+    PDF_SUPPORT = False
+    print("Warning: pdfplumber not installed. PDF parsing disabled. Install with: pip install pdfplumber")
+
 
 @dataclass
 class Transaction:
@@ -52,6 +59,452 @@ def parse_german_date(value: str) -> datetime:
         return datetime.strptime(value.strip(), "%d.%m.%Y")
     except ValueError:
         return datetime.min
+
+
+# German month names for Trade Republic PDF parsing (including encoding variants)
+GERMAN_MONTHS = {
+    "Januar": 1, "Jan": 1, "Jan.": 1,
+    "Februar": 2, "Feb": 2, "Feb.": 2,
+    "März": 3, "Mär": 3, "Mär.": 3, "M\xe4rz": 3, "M\xe4r": 3, "M\xe4r.": 3,
+    "April": 4, "Apr": 4, "Apr.": 4,
+    "Mai": 5,
+    "Juni": 6, "Jun": 6, "Jun.": 6,
+    "Juli": 7, "Jul": 7, "Jul.": 7,
+    "August": 8, "Aug": 8, "Aug.": 8,
+    "September": 9, "Sep": 9, "Sep.": 9,
+    "Oktober": 10, "Okt": 10, "Okt.": 10,
+    "November": 11, "Nov": 11, "Nov.": 11,
+    "Dezember": 12, "Dez": 12, "Dez.": 12,
+}
+
+
+def normalize_tr_text(text: str) -> str:
+    """Normalize Trade Republic PDF text for consistent parsing"""
+    # Handle common encoding issues with German umlauts
+    replacements = {
+        "\xe4": "ä", "\xf6": "ö", "\xfc": "ü",
+        "\xc4": "Ä", "\xd6": "Ö", "\xdc": "Ü",
+        "\xdf": "ß",
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    return text
+
+
+def parse_trade_republic_date(date_str: str) -> datetime:
+    """Parse Trade Republic date format (e.g., '04 März 2025' or '02 Apr. 2025')"""
+    date_str = date_str.strip()
+    # Pattern: DD Month YYYY
+    match = re.match(r"(\d{1,2})\s+(\w+\.?)\s+(\d{4})", date_str)
+    if match:
+        day = int(match.group(1))
+        month_str = match.group(2)
+        year = int(match.group(3))
+        month = GERMAN_MONTHS.get(month_str)
+        if month:
+            return datetime(year, month, day)
+    return datetime.min
+
+
+def parse_trade_republic_beschreibung(beschreibung: str, transaction: Transaction):
+    """Parse Trade Republic PDF description field"""
+    beschreibung = beschreibung.strip()
+
+    # Buy/Sell trade pattern: "Buy trade ISIN NAME, quantity: X" or "Sell trade ISIN NAME, quantity: X"
+    trade_match = re.match(
+        r"(Buy|Sell)\s+trade\s+([A-Z0-9]{12})\s+(.+?),\s*quantity:\s*([\d.,]+)",
+        beschreibung
+    )
+    if trade_match:
+        transaction.typ = "Order"
+        transaction.is_kauf = trade_match.group(1) == "Buy"
+        transaction.is_verkauf = trade_match.group(1) == "Sell"
+        transaction.isin = trade_match.group(2)
+        transaction.name = trade_match.group(3).strip()
+        # Quantity uses dot as decimal separator in TR PDF
+        quantity_str = trade_match.group(4).replace(",", "")
+        try:
+            transaction.stueck = float(quantity_str)
+        except ValueError:
+            transaction.stueck = 0.0
+        return
+
+    # Incoming transfer (Einzahlung)
+    if beschreibung.startswith("Incoming transfer"):
+        transaction.typ = "Einzahlung"
+        return
+
+    # Outgoing transfer (Auszahlung)
+    if beschreibung.startswith("Outgoing transfer"):
+        transaction.typ = "Auszahlung"
+        return
+
+    # Tax Optimisation (Steuerausgleich)
+    if "Tax Optimisation" in beschreibung or "Tax optimisation" in beschreibung:
+        transaction.typ = "Steuerausgleich"
+        return
+
+    # Cash Dividend
+    div_match = re.match(r"Cash Dividend for ISIN\s+([A-Z0-9]{12})", beschreibung)
+    if div_match:
+        transaction.typ = "Dividende"
+        transaction.isin = div_match.group(1)
+        return
+
+    transaction.typ = "Sonstig"
+
+
+def read_trade_republic_pdf(filepath: str) -> list[Transaction]:
+    """Read and parse Trade Republic PDF account statement"""
+    if not PDF_SUPPORT:
+        raise ImportError("pdfplumber is required for PDF parsing. Install with: pip install pdfplumber")
+
+    transactions = []
+
+    with pdfplumber.open(filepath) as pdf:
+        all_text = ""
+        for page in pdf.pages:
+            text = page.extract_text()
+            if text:
+                all_text += text + "\n"
+
+        if not all_text:
+            return transactions
+
+        lines = all_text.split("\n")
+
+        # The PDF format has transactions split across multiple lines:
+        # Line 1: "DD Monat"
+        # Line 2: "Typ[no space]Description ... amount € amount €" OR "Typ Description..."
+        # Line 3: "YYYY" OR "YYYY additional_description_part"
+        # OR in some cases the year is on the same line as the type
+
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
+
+            # Skip headers, footers, and empty lines
+            if not line or "TRADE REPUBLIC" in line or "DATUM TYP" in line:
+                i += 1
+                continue
+            if "Trade Republic Bank" in line or "www.traderepublic" in line:
+                i += 1
+                continue
+            if "Erstellt am" in line or "Seite" in line:
+                i += 1
+                continue
+            if "KONTOÜBERSICHT" in line or "UMSATZÜBERSICHT" in line:
+                i += 1
+                continue
+            if "PRODUKT" in line or "Cashkonto" in line:
+                i += 1
+                continue
+            if "BARMITTELÜBERSICHT" in line or "TREUHANDKONTEN" in line:
+                i += 1
+                continue
+            if "GELDMARKTFONDS" in line or "HINWEISE" in line:
+                i += 1
+                continue
+            if line.startswith("Bitte überprüfe") or "Einwendungen" in line:
+                i += 1
+                continue
+
+            # Format 1: "DD Monat" alone on a line
+            date_start_match = re.match(r"^(\d{1,2})\s+([\wäöü]+\.?)$", line, re.IGNORECASE)
+
+            # Format 2: "DD Monat Buy/Sell trade ISIN NAME, quantity:" (quantity on next line)
+            date_with_trade_match = re.match(
+                r"^(\d{1,2})\s+([\wäöü]+\.?)\s+(Buy|Sell)\s+trade\s+([A-Z0-9]{12})\s+(.+?),\s*quantity:\s*$",
+                normalize_tr_text(line),
+                re.IGNORECASE
+            )
+
+            # Format 3: "DD Monat Buy/Sell trade ISIN PARTIAL_NAME" (name continues, no quantity yet)
+            date_with_partial_trade_match = re.match(
+                r"^(\d{1,2})\s+([\wäöü]+\.?)\s+(Buy|Sell)\s+trade\s+([A-Z0-9]{12})\s+(.+)$",
+                normalize_tr_text(line),
+                re.IGNORECASE
+            )
+
+            if date_with_trade_match:
+                # Format 2: Date with partial trade info
+                day = date_with_trade_match.group(1)
+                month_str = date_with_trade_match.group(2)
+                trade_direction = date_with_trade_match.group(3)
+                isin = date_with_trade_match.group(4)
+                name = date_with_trade_match.group(5).strip()
+
+                # Next lines contain: "Handel [amounts]" and "YYYY [quantity]"
+                if i + 2 >= len(lines):
+                    i += 1
+                    continue
+
+                i += 1
+                amounts_line = normalize_tr_text(lines[i].strip())
+                i += 1
+                year_qty_line = normalize_tr_text(lines[i].strip())
+
+                # Extract amounts from amounts_line
+                amount_pattern = r"(-?[\d.]+,\d{2})\s*€"
+                amounts = re.findall(amount_pattern, amounts_line)
+
+                # Extract year and quantity from year_qty_line
+                year_qty_match = re.match(r"^(\d{4})\s+([\d.]+)$", year_qty_line)
+                if not year_qty_match:
+                    continue
+
+                year = int(year_qty_match.group(1))
+                try:
+                    quantity = float(year_qty_match.group(2))
+                except ValueError:
+                    quantity = 0.0
+
+                # Parse date
+                month = GERMAN_MONTHS.get(month_str) or GERMAN_MONTHS.get(month_str.rstrip("."))
+                if not month:
+                    continue
+
+                try:
+                    datum = datetime(year, month, int(day))
+                except ValueError:
+                    continue
+
+                # Determine betrag
+                is_buy = trade_direction.lower() == "buy"
+                betrag = 0.0
+                if amounts:
+                    if is_buy:
+                        betrag = -abs(parse_german_number(amounts[-2])) if len(amounts) >= 2 else -abs(parse_german_number(amounts[0]))
+                    else:
+                        betrag = abs(parse_german_number(amounts[0]))
+
+                # Create transaction
+                t = Transaction(
+                    datum=datum,
+                    valuta=datum,
+                    betrag=betrag,
+                    status="gebucht",
+                    verwendungszweck=f"{trade_direction} trade {isin} {name}, quantity: {quantity}",
+                    iban=""
+                )
+                t.typ = "Order"
+                t.isin = isin
+                t.name = name
+                t.stueck = quantity
+                t.is_kauf = is_buy
+                t.is_verkauf = not is_buy
+
+                transactions.append(t)
+                i += 1
+                continue
+
+            elif date_with_partial_trade_match and not date_with_trade_match:
+                # Format 3: Long names split across lines
+                # Line 1: "DD Monat Buy/Sell trade ISIN PARTIAL_NAME"
+                # Line 2: "Handel [amounts]"
+                # Line 3: "YYYY REST_NAME, quantity: X"
+                day = date_with_partial_trade_match.group(1)
+                month_str = date_with_partial_trade_match.group(2)
+                trade_direction = date_with_partial_trade_match.group(3)
+                isin = date_with_partial_trade_match.group(4)
+                name_part1 = date_with_partial_trade_match.group(5).strip()
+
+                if i + 2 >= len(lines):
+                    i += 1
+                    continue
+
+                i += 1
+                amounts_line = normalize_tr_text(lines[i].strip())
+                i += 1
+                year_rest_line = normalize_tr_text(lines[i].strip())
+
+                # Extract amounts
+                amount_pattern = r"(-?[\d.]+,\d{2})\s*€"
+                amounts = re.findall(amount_pattern, amounts_line)
+
+                # Parse year line: "YYYY REST_NAME, quantity: X" or "YYYY quantity: X"
+                year_rest_match = re.match(r"^(\d{4})\s+(.*)$", year_rest_line)
+                if not year_rest_match:
+                    continue
+
+                year = int(year_rest_match.group(1))
+                rest_content = year_rest_match.group(2)
+
+                # Extract quantity from rest
+                qty_match = re.search(r"quantity:\s*([\d.]+)", rest_content)
+                if qty_match:
+                    try:
+                        quantity = float(qty_match.group(1))
+                    except ValueError:
+                        quantity = 0.0
+                    # Name continuation is before "quantity:"
+                    name_part2 = re.sub(r",?\s*quantity:\s*[\d.]+", "", rest_content).strip()
+                else:
+                    quantity = 0.0
+                    name_part2 = rest_content.strip()
+
+                # Combine name parts
+                full_name = (name_part1 + " " + name_part2).strip().rstrip(",")
+
+                # Parse date
+                month = GERMAN_MONTHS.get(month_str) or GERMAN_MONTHS.get(month_str.rstrip("."))
+                if not month:
+                    continue
+
+                try:
+                    datum = datetime(year, month, int(day))
+                except ValueError:
+                    continue
+
+                # Determine betrag
+                is_buy = trade_direction.lower() == "buy"
+                betrag = 0.0
+                if amounts:
+                    if is_buy:
+                        betrag = -abs(parse_german_number(amounts[-2])) if len(amounts) >= 2 else -abs(parse_german_number(amounts[0]))
+                    else:
+                        betrag = abs(parse_german_number(amounts[0]))
+
+                # Create transaction
+                t = Transaction(
+                    datum=datum,
+                    valuta=datum,
+                    betrag=betrag,
+                    status="gebucht",
+                    verwendungszweck=f"{trade_direction} trade {isin} {full_name}, quantity: {quantity}",
+                    iban=""
+                )
+                t.typ = "Order"
+                t.isin = isin
+                t.name = full_name
+                t.stueck = quantity
+                t.is_kauf = is_buy
+                t.is_verkauf = not is_buy
+
+                transactions.append(t)
+                i += 1
+                continue
+
+            elif date_start_match:
+                day = date_start_match.group(1)
+                month_str = date_start_match.group(2)
+
+                # Next line should have type and description, year comes later or on same line
+                if i + 1 >= len(lines):
+                    i += 1
+                    continue
+
+                # Collect the transaction data from following lines
+                i += 1
+                data_line = lines[i].strip() if i < len(lines) else ""
+
+                # Normalize text to handle encoding issues
+                data_line = normalize_tr_text(data_line)
+
+                # Type can be directly attached: "ÜberweisungIncoming..." or "Handel Buy..."
+                # Or separated: "Überweisung Incoming..."
+                typ_patterns = [
+                    # Überweisung patterns (with and without space)
+                    (r"^[Üü]berweisung\s*(.+)$", "Überweisung"),
+                    # Handel patterns
+                    (r"^Handel\s+(.+)$", "Handel"),
+                    # Steuern patterns
+                    (r"^Steuern\s+(.+)$", "Steuern"),
+                    # Erträge patterns (with encoding variants)
+                    (r"^Ertr[äa]ge\s*(.+)$", "Erträge"),
+                ]
+
+                tr_typ = None
+                rest_data = ""
+
+                for pattern, typ_name in typ_patterns:
+                    match = re.match(pattern, data_line, re.IGNORECASE)
+                    if match:
+                        tr_typ = typ_name
+                        rest_data = match.group(1)
+                        break
+
+                if not tr_typ:
+                    continue
+
+                # Look for year in next line
+                year = None
+                if i + 1 < len(lines):
+                    year_line = lines[i + 1].strip()
+                    year_match = re.match(r"^(\d{4})(?:\s+(.*))?$", year_line)
+                    if year_match:
+                        year = int(year_match.group(1))
+                        # Additional description might be on the year line
+                        extra = year_match.group(2)
+                        if extra:
+                            rest_data += " " + extra
+                        i += 1
+
+                if not year:
+                    # Try to find year in the data line itself
+                    year_in_data = re.search(r"\b(20\d{2})\b", data_line)
+                    if year_in_data:
+                        year = int(year_in_data.group(1))
+                    else:
+                        continue
+
+                # Parse date
+                month = GERMAN_MONTHS.get(month_str)
+                if not month:
+                    # Try without dot
+                    month = GERMAN_MONTHS.get(month_str.rstrip("."))
+                if not month:
+                    continue
+
+                try:
+                    datum = datetime(year, month, int(day))
+                except ValueError:
+                    continue
+
+                # Extract amounts from rest_data
+                # Format: "description amount € [amount €] saldo €"
+                amount_pattern = r"(-?[\d.]+,\d{2})\s*€"
+                amounts = re.findall(amount_pattern, rest_data)
+
+                # Remove amounts to get description
+                beschreibung = re.sub(r"\s*-?[\d.]+,\d{2}\s*€", "", rest_data).strip()
+
+                # Determine betrag based on type and amounts
+                betrag = 0.0
+                if amounts:
+                    if tr_typ == "Handel":
+                        if "Buy trade" in beschreibung:
+                            # Buy: amount is expense (second-to-last is the cost)
+                            betrag = -abs(parse_german_number(amounts[-2])) if len(amounts) >= 2 else -abs(parse_german_number(amounts[0]))
+                        elif "Sell trade" in beschreibung:
+                            # Sell: amount is income (first amount)
+                            betrag = abs(parse_german_number(amounts[0]))
+                    elif tr_typ == "Überweisung":
+                        if "Incoming" in beschreibung:
+                            betrag = abs(parse_german_number(amounts[0]))
+                        elif "Outgoing" in beschreibung:
+                            betrag = -abs(parse_german_number(amounts[-2])) if len(amounts) >= 2 else -abs(parse_german_number(amounts[0]))
+                    elif tr_typ in ("Steuern", "Erträge"):
+                        betrag = abs(parse_german_number(amounts[0]))
+
+                # Create transaction
+                t = Transaction(
+                    datum=datum,
+                    valuta=datum,
+                    betrag=betrag,
+                    status="gebucht",
+                    verwendungszweck=beschreibung,
+                    iban=""
+                )
+
+                # Parse description for trade details
+                parse_trade_republic_beschreibung(beschreibung, t)
+
+                transactions.append(t)
+
+            i += 1
+
+    return transactions
 
 
 def parse_verwendungszweck(zweck: str, transaction: Transaction):
@@ -1277,12 +1730,55 @@ def generate_html(transactions: list[Transaction], output_path: str):
     print(f"HTML report generated: {output_path}")
 
 
-def main():
-    csv_file = Path(__file__).parent / "ZERO-kontoumsaetze-28.01.2026.csv"
-    html_file = Path(__file__).parent / "trades_overview.html"
+def load_transactions(directory: Path) -> list[Transaction]:
+    """Load transactions from all available sources (CSV and PDF files)"""
+    all_transactions = []
 
-    print(f"Reading {csv_file}...")
-    transactions = read_csv(str(csv_file))
+    # Find and load CSV files (ZERO format)
+    csv_files = list(directory.glob("ZERO-*.csv"))
+    for csv_file in csv_files:
+        print(f"Loading CSV: {csv_file.name}...")
+        try:
+            transactions = read_csv(str(csv_file))
+            print(f"  -> {len(transactions)} transactions")
+            all_transactions.extend(transactions)
+        except Exception as e:
+            print(f"  -> Error: {e}")
+
+    # Find and load Trade Republic PDF files
+    if PDF_SUPPORT:
+        pdf_files = list(directory.glob("*.pdf"))
+        # Filter for likely Trade Republic files (Kontoauszug, etc.)
+        for pdf_file in pdf_files:
+            print(f"Loading PDF: {pdf_file.name}...")
+            try:
+                transactions = read_trade_republic_pdf(str(pdf_file))
+                print(f"  -> {len(transactions)} transactions")
+                all_transactions.extend(transactions)
+            except Exception as e:
+                print(f"  -> Error: {e}")
+
+    # Remove duplicates based on (datum, betrag, isin, stueck)
+    seen = set()
+    unique_transactions = []
+    for t in all_transactions:
+        key = (t.datum, round(t.betrag, 2), t.isin, round(t.stueck, 4))
+        if key not in seen:
+            seen.add(key)
+            unique_transactions.append(t)
+
+    if len(all_transactions) != len(unique_transactions):
+        print(f"\nRemoved {len(all_transactions) - len(unique_transactions)} duplicate transactions")
+
+    return unique_transactions
+
+
+def main():
+    directory = Path(__file__).parent
+    html_file = directory / "trades_overview.html"
+
+    print("Scanning for data sources...")
+    transactions = load_transactions(directory)
 
     print(f"Total transactions: {len(transactions)}")
 
