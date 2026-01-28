@@ -1,5 +1,7 @@
 import csv
+import json
 import re
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -224,6 +226,18 @@ def generate_html(transactions: list[Transaction], output_path: str):
 
         if abs(open_stueck) < 0.001:  # Fully closed position
             position_data["pnl"] = verkauf_sum + kauf_sum
+            # Calculate hold time (first buy to last sell)
+            if data["kaufe"] and data["verkaeufe"]:
+                first_buy = min(t.datum for t in data["kaufe"])
+                last_sell = max(t.datum for t in data["verkaeufe"])
+                position_data["hold_days"] = (last_sell - first_buy).days
+                position_data["first_buy"] = first_buy
+                position_data["last_sell"] = last_sell
+            else:
+                position_data["hold_days"] = 0
+            # Calculate return %
+            invested = abs(kauf_sum)
+            position_data["rendite_pct"] = (position_data["pnl"] / invested * 100) if invested > 0 else 0
             closed_positions.append(position_data)
         else:
             # Open position - calculate average buy price for held shares
@@ -414,7 +428,54 @@ def generate_html(transactions: list[Transaction], output_path: str):
             background: rgba(255,255,255,0.2);
             border-radius: 4px;
         }}
+
+        /* Sortable table headers */
+        th.sortable {{
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+            padding-right: 24px;
+            transition: background 0.2s;
+        }}
+        th.sortable:hover {{
+            background: rgba(255,255,255,0.1);
+        }}
+        th.sortable::after {{
+            content: '⇅';
+            position: absolute;
+            right: 8px;
+            opacity: 0.4;
+            font-size: 0.75rem;
+        }}
+        th.sortable.asc::after {{
+            content: '↑';
+            opacity: 1;
+            color: #00d4ff;
+        }}
+        th.sortable.desc::after {{
+            content: '↓';
+            opacity: 1;
+            color: #00d4ff;
+        }}
+
+        /* Chart container */
+        .chart-container {{
+            position: relative;
+            height: 400px;
+            margin-top: 20px;
+        }}
+        .chart-grid {{
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }}
+        @media (max-width: 1000px) {{
+            .chart-grid {{
+                grid-template-columns: 1fr;
+            }}
+        }}
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <div class="container">
@@ -449,15 +510,15 @@ def generate_html(transactions: list[Transaction], output_path: str):
 
         <div class="section">
             <h2>📂 Offene Positionen (noch gehalten)</h2>
-            <table>
+            <table id="open-positions-table">
                 <thead>
                     <tr>
-                        <th>ISIN</th>
-                        <th>Name</th>
-                        <th class="text-right">Stück</th>
-                        <th class="text-right">Ø Kaufpreis</th>
-                        <th class="text-right">Investiert</th>
-                        <th class="text-right">Realisiert</th>
+                        <th class="sortable" data-sort="string">ISIN</th>
+                        <th class="sortable" data-sort="string">Name</th>
+                        <th class="sortable text-right" data-sort="number">Stück</th>
+                        <th class="sortable text-right" data-sort="number">Ø Kaufpreis</th>
+                        <th class="sortable text-right" data-sort="number">Investiert</th>
+                        <th class="sortable text-right" data-sort="number">Realisiert</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -483,16 +544,16 @@ def generate_html(transactions: list[Transaction], output_path: str):
 
         <div class="section">
             <h2>✅ Geschlossene Positionen</h2>
-            <table>
+            <table id="closed-positions-table">
                 <thead>
                     <tr>
-                        <th>ISIN</th>
-                        <th>Name</th>
-                        <th class="text-right">Käufe</th>
-                        <th class="text-right">Verkäufe</th>
-                        <th class="text-right">Investiert</th>
-                        <th class="text-right">Erlös</th>
-                        <th class="text-right">P&L</th>
+                        <th class="sortable" data-sort="string">ISIN</th>
+                        <th class="sortable" data-sort="string">Name</th>
+                        <th class="sortable text-right" data-sort="number">Käufe</th>
+                        <th class="sortable text-right" data-sort="number">Verkäufe</th>
+                        <th class="sortable text-right" data-sort="number">Investiert</th>
+                        <th class="sortable text-right" data-sort="number">Erlös</th>
+                        <th class="sortable text-right" data-sort="number">P&L</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -519,15 +580,15 @@ def generate_html(transactions: list[Transaction], output_path: str):
         <div class="section">
             <h2>📋 Alle Trades</h2>
             <div class="trades-table">
-                <table>
+                <table id="all-trades-table">
                     <thead>
                         <tr>
-                            <th>Datum</th>
-                            <th>Typ</th>
-                            <th>ISIN</th>
-                            <th>Name</th>
-                            <th class="text-right">Stück</th>
-                            <th class="text-right">Betrag</th>
+                            <th class="sortable" data-sort="date">Datum</th>
+                            <th class="sortable" data-sort="string">Typ</th>
+                            <th class="sortable" data-sort="string">ISIN</th>
+                            <th class="sortable" data-sort="string">Name</th>
+                            <th class="sortable text-right" data-sort="number">Stück</th>
+                            <th class="sortable text-right" data-sort="number">Betrag</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -552,7 +613,194 @@ def generate_html(transactions: list[Transaction], output_path: str):
                 </table>
             </div>
         </div>
+
+        <div class="section">
+            <h2>📊 Trade Visualisierung - Geschlossene Positionen</h2>
+            <div class="chart-grid">
+                <div>
+                    <h3 style="color: #888; font-size: 0.9rem; margin-bottom: 10px;">Haltedauer vs. Rendite (%)</h3>
+                    <div class="chart-container">
+                        <canvas id="holdTimePctChart"></canvas>
+                    </div>
+                </div>
+                <div>
+                    <h3 style="color: #888; font-size: 0.9rem; margin-bottom: 10px;">Haltedauer vs. Rendite (€)</h3>
+                    <div class="chart-container">
+                        <canvas id="holdTimeEuroChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
+
+    <script>
+        // Table sorting functionality
+        document.querySelectorAll('th.sortable').forEach(th => {
+            th.addEventListener('click', () => {
+                const table = th.closest('table');
+                const tbody = table.querySelector('tbody');
+                const rows = Array.from(tbody.querySelectorAll('tr'));
+                const colIndex = Array.from(th.parentNode.children).indexOf(th);
+                const sortType = th.dataset.sort;
+
+                // Toggle sort direction
+                const isAsc = th.classList.contains('asc');
+
+                // Remove sort classes from all headers in this table
+                table.querySelectorAll('th.sortable').forEach(header => {
+                    header.classList.remove('asc', 'desc');
+                });
+
+                // Set new sort direction
+                th.classList.add(isAsc ? 'desc' : 'asc');
+                const direction = isAsc ? -1 : 1;
+
+                rows.sort((a, b) => {
+                    let aVal = a.cells[colIndex].textContent.trim();
+                    let bVal = b.cells[colIndex].textContent.trim();
+
+                    if (sortType === 'number') {
+                        // Parse numbers (handle German format and currency)
+                        aVal = parseFloat(aVal.replace(/[^\\d,.-]/g, '').replace('.', '').replace(',', '.')) || 0;
+                        bVal = parseFloat(bVal.replace(/[^\\d,.-]/g, '').replace('.', '').replace(',', '.')) || 0;
+                        return (aVal - bVal) * direction;
+                    } else if (sortType === 'date') {
+                        // Parse German date format DD.MM.YYYY
+                        const aParts = aVal.split('.');
+                        const bParts = bVal.split('.');
+                        aVal = new Date(aParts[2], aParts[1] - 1, aParts[0]);
+                        bVal = new Date(bParts[2], bParts[1] - 1, bParts[0]);
+                        return (aVal - bVal) * direction;
+                    } else {
+                        return aVal.localeCompare(bVal, 'de') * direction;
+                    }
+                });
+
+                rows.forEach(row => tbody.appendChild(row));
+            });
+        });
+"""
+
+    # Generate scatter plot data for closed positions
+    scatter_data_pct = []
+    scatter_data_euro = []
+    for pos in closed_positions:
+        hold_days = pos.get("hold_days", 0)
+        rendite_pct = pos.get("rendite_pct", 0)
+        pnl_euro = pos.get("pnl", 0)
+        name = pos.get("name", "")[:25]
+        scatter_data_pct.append({
+            "x": hold_days,
+            "y": round(rendite_pct, 2),
+            "name": name,
+            "pnl": round(pnl_euro, 2)
+        })
+        scatter_data_euro.append({
+            "x": hold_days,
+            "y": round(pnl_euro, 2),
+            "name": name,
+            "pct": round(rendite_pct, 2)
+        })
+
+    html += f"""
+        // Chart.js configuration - Scatter plots
+        const scatterDataPct = {json.dumps(scatter_data_pct)};
+        const scatterDataEuro = {json.dumps(scatter_data_euro)};
+
+        // Hold time vs Rendite %
+        const pctCtx = document.getElementById('holdTimePctChart').getContext('2d');
+        new Chart(pctCtx, {{
+            type: 'scatter',
+            data: {{
+                datasets: [{{
+                    label: 'Geschlossene Positionen',
+                    data: scatterDataPct,
+                    backgroundColor: scatterDataPct.map(d => d.y >= 0 ? 'rgba(16, 185, 129, 0.7)' : 'rgba(239, 68, 68, 0.7)'),
+                    borderColor: scatterDataPct.map(d => d.y >= 0 ? '#10b981' : '#ef4444'),
+                    borderWidth: 2,
+                    pointRadius: 8,
+                    pointHoverRadius: 12
+                }}]
+            }},
+            options: {{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {{
+                    legend: {{ display: false }},
+                    tooltip: {{
+                        callbacks: {{
+                            label: function(context) {{
+                                const d = context.raw;
+                                return [d.name, 'Haltedauer: ' + d.x + ' Tage', 'Rendite: ' + d.y.toLocaleString('de-DE') + ' %', 'P&L: ' + d.pnl.toLocaleString('de-DE') + ' €'];
+                            }}
+                        }}
+                    }}
+                }},
+                scales: {{
+                    x: {{
+                        title: {{ display: true, text: 'Haltedauer (Tage)', color: '#888' }},
+                        ticks: {{ color: '#666' }},
+                        grid: {{ color: 'rgba(255,255,255,0.05)' }}
+                    }},
+                    y: {{
+                        title: {{ display: true, text: 'Rendite (%)', color: '#888' }},
+                        ticks: {{
+                            color: '#666',
+                            callback: function(value) {{ return value.toLocaleString('de-DE') + ' %'; }}
+                        }},
+                        grid: {{ color: 'rgba(255,255,255,0.05)' }}
+                    }}
+                }}
+            }}
+        }});
+
+        // Hold time vs Rendite €
+        const euroCtx = document.getElementById('holdTimeEuroChart').getContext('2d');
+        new Chart(euroCtx, {{
+            type: 'scatter',
+            data: {{
+                datasets: [{{
+                    label: 'Geschlossene Positionen',
+                    data: scatterDataEuro,
+                    backgroundColor: scatterDataEuro.map(d => d.y >= 0 ? 'rgba(16, 185, 129, 0.7)' : 'rgba(239, 68, 68, 0.7)'),
+                    borderColor: scatterDataEuro.map(d => d.y >= 0 ? '#10b981' : '#ef4444'),
+                    borderWidth: 2,
+                    pointRadius: 8,
+                    pointHoverRadius: 12
+                }}]
+            }},
+            options: {{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {{
+                    legend: {{ display: false }},
+                    tooltip: {{
+                        callbacks: {{
+                            label: function(context) {{
+                                const d = context.raw;
+                                return [d.name, 'Haltedauer: ' + d.x + ' Tage', 'P&L: ' + d.y.toLocaleString('de-DE') + ' €', 'Rendite: ' + d.pct.toLocaleString('de-DE') + ' %'];
+                            }}
+                        }}
+                    }}
+                }},
+                scales: {{
+                    x: {{
+                        title: {{ display: true, text: 'Haltedauer (Tage)', color: '#888' }},
+                        ticks: {{ color: '#666' }},
+                        grid: {{ color: 'rgba(255,255,255,0.05)' }}
+                    }},
+                    y: {{
+                        title: {{ display: true, text: 'Rendite (€)', color: '#888' }},
+                        ticks: {{
+                            color: '#666',
+                            callback: function(value) {{ return value.toLocaleString('de-DE') + ' €'; }}
+                        }},
+                        grid: {{ color: 'rgba(255,255,255,0.05)' }}
+                    }}
+                }}
+            }}
+        }});
+    </script>
 </body>
 </html>
 """

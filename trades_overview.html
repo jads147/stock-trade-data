@@ -157,7 +157,54 @@
             background: rgba(255,255,255,0.2);
             border-radius: 4px;
         }
+
+        /* Sortable table headers */
+        th.sortable {
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+            padding-right: 24px;
+            transition: background 0.2s;
+        }
+        th.sortable:hover {
+            background: rgba(255,255,255,0.1);
+        }
+        th.sortable::after {
+            content: '⇅';
+            position: absolute;
+            right: 8px;
+            opacity: 0.4;
+            font-size: 0.75rem;
+        }
+        th.sortable.asc::after {
+            content: '↑';
+            opacity: 1;
+            color: #00d4ff;
+        }
+        th.sortable.desc::after {
+            content: '↓';
+            opacity: 1;
+            color: #00d4ff;
+        }
+
+        /* Chart container */
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin-top: 20px;
+        }
+        .chart-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+        @media (max-width: 1000px) {
+            .chart-grid {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <div class="container">
@@ -192,15 +239,15 @@
 
         <div class="section">
             <h2>📂 Offene Positionen (noch gehalten)</h2>
-            <table>
+            <table id="open-positions-table">
                 <thead>
                     <tr>
-                        <th>ISIN</th>
-                        <th>Name</th>
-                        <th class="text-right">Stück</th>
-                        <th class="text-right">Ø Kaufpreis</th>
-                        <th class="text-right">Investiert</th>
-                        <th class="text-right">Realisiert</th>
+                        <th class="sortable" data-sort="string">ISIN</th>
+                        <th class="sortable" data-sort="string">Name</th>
+                        <th class="sortable text-right" data-sort="number">Stück</th>
+                        <th class="sortable text-right" data-sort="number">Ø Kaufpreis</th>
+                        <th class="sortable text-right" data-sort="number">Investiert</th>
+                        <th class="sortable text-right" data-sort="number">Realisiert</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -306,16 +353,16 @@
 
         <div class="section">
             <h2>✅ Geschlossene Positionen</h2>
-            <table>
+            <table id="closed-positions-table">
                 <thead>
                     <tr>
-                        <th>ISIN</th>
-                        <th>Name</th>
-                        <th class="text-right">Käufe</th>
-                        <th class="text-right">Verkäufe</th>
-                        <th class="text-right">Investiert</th>
-                        <th class="text-right">Erlös</th>
-                        <th class="text-right">P&L</th>
+                        <th class="sortable" data-sort="string">ISIN</th>
+                        <th class="sortable" data-sort="string">Name</th>
+                        <th class="sortable text-right" data-sort="number">Käufe</th>
+                        <th class="sortable text-right" data-sort="number">Verkäufe</th>
+                        <th class="sortable text-right" data-sort="number">Investiert</th>
+                        <th class="sortable text-right" data-sort="number">Erlös</th>
+                        <th class="sortable text-right" data-sort="number">P&L</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -767,15 +814,15 @@
         <div class="section">
             <h2>📋 Alle Trades</h2>
             <div class="trades-table">
-                <table>
+                <table id="all-trades-table">
                     <thead>
                         <tr>
-                            <th>Datum</th>
-                            <th>Typ</th>
-                            <th>ISIN</th>
-                            <th>Name</th>
-                            <th class="text-right">Stück</th>
-                            <th class="text-right">Betrag</th>
+                            <th class="sortable" data-sort="date">Datum</th>
+                            <th class="sortable" data-sort="string">Typ</th>
+                            <th class="sortable" data-sort="string">ISIN</th>
+                            <th class="sortable" data-sort="string">Name</th>
+                            <th class="sortable text-right" data-sort="number">Stück</th>
+                            <th class="sortable text-right" data-sort="number">Betrag</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -2495,6 +2542,170 @@
                 </table>
             </div>
         </div>
+
+        <div class="section">
+            <h2>📊 Trade Visualisierung - Geschlossene Positionen</h2>
+            <div class="chart-grid">
+                <div>
+                    <h3 style="color: #888; font-size: 0.9rem; margin-bottom: 10px;">Haltedauer vs. Rendite (%)</h3>
+                    <div class="chart-container">
+                        <canvas id="holdTimePctChart"></canvas>
+                    </div>
+                </div>
+                <div>
+                    <h3 style="color: #888; font-size: 0.9rem; margin-bottom: 10px;">Haltedauer vs. Rendite (€)</h3>
+                    <div class="chart-container">
+                        <canvas id="holdTimeEuroChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
+
+    <script>
+        // Table sorting functionality
+        document.querySelectorAll('th.sortable').forEach(th => {
+            th.addEventListener('click', () => {
+                const table = th.closest('table');
+                const tbody = table.querySelector('tbody');
+                const rows = Array.from(tbody.querySelectorAll('tr'));
+                const colIndex = Array.from(th.parentNode.children).indexOf(th);
+                const sortType = th.dataset.sort;
+
+                // Toggle sort direction
+                const isAsc = th.classList.contains('asc');
+
+                // Remove sort classes from all headers in this table
+                table.querySelectorAll('th.sortable').forEach(header => {
+                    header.classList.remove('asc', 'desc');
+                });
+
+                // Set new sort direction
+                th.classList.add(isAsc ? 'desc' : 'asc');
+                const direction = isAsc ? -1 : 1;
+
+                rows.sort((a, b) => {
+                    let aVal = a.cells[colIndex].textContent.trim();
+                    let bVal = b.cells[colIndex].textContent.trim();
+
+                    if (sortType === 'number') {
+                        // Parse numbers (handle German format and currency)
+                        aVal = parseFloat(aVal.replace(/[^\d,.-]/g, '').replace('.', '').replace(',', '.')) || 0;
+                        bVal = parseFloat(bVal.replace(/[^\d,.-]/g, '').replace('.', '').replace(',', '.')) || 0;
+                        return (aVal - bVal) * direction;
+                    } else if (sortType === 'date') {
+                        // Parse German date format DD.MM.YYYY
+                        const aParts = aVal.split('.');
+                        const bParts = bVal.split('.');
+                        aVal = new Date(aParts[2], aParts[1] - 1, aParts[0]);
+                        bVal = new Date(bParts[2], bParts[1] - 1, bParts[0]);
+                        return (aVal - bVal) * direction;
+                    } else {
+                        return aVal.localeCompare(bVal, 'de') * direction;
+                    }
+                });
+
+                rows.forEach(row => tbody.appendChild(row));
+            });
+        });
+
+        // Chart.js configuration - Scatter plots
+        const scatterDataPct = [{"x": 20, "y": 3.31, "name": "WITR MU.AS.I. ETP 62     ", "pnl": 427.68}, {"x": 22, "y": 21.56, "name": "HSBC T+B CALL26 ABEA     ", "pnl": 190.82}, {"x": 0, "y": 1.56, "name": "VONT.FINL PR CALL25 N100 ", "pnl": 132.63}, {"x": 18, "y": 9.99, "name": "VONT.FINL PR CALL26 ABEA ", "pnl": 104.42}, {"x": 22, "y": 1.51, "name": "VANG.FTSE A.W. DLA", "pnl": 42.43}, {"x": 7, "y": 65.49, "name": "HSBC T+B TURBOC ABEA     ", "pnl": 36.02}, {"x": 0, "y": 0.7, "name": "VONT.FINL PR CALL25 DAX  ", "pnl": 34.9}, {"x": 62, "y": 0.29, "name": "MS CO.I. CALL26 ABEA     ", "pnl": 32.78}, {"x": 7, "y": 24.41, "name": "CANAAN INC SP.ADR CL.A", "pnl": 30.8}, {"x": 0, "y": 0.55, "name": "HSBC T+B CALL27 ABEA", "pnl": 27.55}, {"x": 1, "y": 1.89, "name": "VONT.FINL PR TURBOC ABEA ", "pnl": 16.05}, {"x": 0, "y": 0.27, "name": "VONT.FINL PR CALL25 DAX  ", "pnl": 13.35}, {"x": 36, "y": 1.43, "name": "SPDR MSCI ACW IM ETF", "pnl": 9.57}, {"x": 33, "y": 4.32, "name": "MS CO.I. CALL25 DAX      ", "pnl": 9.37}, {"x": 4, "y": 9.47, "name": "GOLDM.S.BK CALL25 NOV    ", "pnl": 8.29}, {"x": 0, "y": 17.08, "name": "HSBC T+B TURBOC ABEA     ", "pnl": 6.49}, {"x": 1, "y": 0.32, "name": "WITR MU.AS.I.RUSS.ETP2062", "pnl": 5.29}, {"x": 0, "y": 0.86, "name": "HSBC T+B TURBOC UNH      ", "pnl": 5.13}, {"x": 7, "y": 0.09, "name": "MS CO.I. CALL25 XAU      ", "pnl": 4.78}, {"x": 1, "y": 0.97, "name": "NVIDIA CORP. DL-,001", "pnl": 1.94}, {"x": 0, "y": 0.02, "name": "VONT.FINL PR TURBOC N100 ", "pnl": 1.2}, {"x": 0, "y": -0.13, "name": "UBS TURBOP N100          ", "pnl": -0.04}, {"x": 1, "y": -0.02, "name": "VONT.FINL PR MINIL DAX   ", "pnl": -0.77}, {"x": 0, "y": -0.1, "name": "BERKSH. H.B NEW DL-,00333", "pnl": -0.9}, {"x": 0, "y": -0.05, "name": "UBS TURBOC25 N100        ", "pnl": -2.0}, {"x": 0, "y": -1.68, "name": "HSBC T+B TURBOC N100     ", "pnl": -3.18}, {"x": 1, "y": -0.94, "name": "HSBC T+B CALL27 N100     ", "pnl": -4.56}, {"x": 10, "y": -0.08, "name": "MUF-AMU.EOSTXX50 2XLEV.AC", "pnl": -4.71}, {"x": 0, "y": -1.51, "name": "MS CO.I. TURBOL ABEA     ", "pnl": -5.0}, {"x": 0, "y": -0.26, "name": "UNITEDHEALTH GROUP DL-,01", "pnl": -6.5}, {"x": 12, "y": -99.88, "name": "HSBC T+B INTRAD          ", "pnl": -8.31}, {"x": 3, "y": -1.25, "name": "ALPHABET INC.CL.C DL-,001", "pnl": -9.4}, {"x": 0, "y": -0.26, "name": "VONT.FINL PR TURBOC ABEA ", "pnl": -10.47}, {"x": 3, "y": -2.52, "name": "BITCOIN GROUP SE O.N.", "pnl": -12.96}, {"x": 1, "y": -0.14, "name": "MS CO.I. CALL25 ABEA     ", "pnl": -14.45}, {"x": 29, "y": -14.42, "name": "MS CO.I. TURBOL SX5E     ", "pnl": -27.74}, {"x": 3, "y": -0.17, "name": "VONT.FINL PR CALL25 ABEA ", "pnl": -28.43}, {"x": 34, "y": -29.35, "name": "MS CO.I. CALL25 ABEA     ", "pnl": -29.32}, {"x": 37, "y": -3.79, "name": "ISHSIII-CORE MSCI WLD DLA", "pnl": -29.5}, {"x": 1, "y": -16.27, "name": "GOLDM.S.BK CALL25 R3NK   ", "pnl": -30.75}, {"x": 12, "y": -98.57, "name": "HSBC T+B TURBOC SAP      ", "pnl": -34.5}, {"x": 11, "y": -99.97, "name": "HSBC T+B TURBO           ", "pnl": -36.14}, {"x": 0, "y": -0.78, "name": "HSBC T+B TURBOC ABEA     ", "pnl": -39.2}, {"x": 1, "y": -0.42, "name": "MS CO.I. CALL26 ABEA     ", "pnl": -42.29}, {"x": 44, "y": -4.91, "name": "GOLDM.S.BK CALL26 DAX    ", "pnl": -53.44}, {"x": 4, "y": -35.59, "name": "VONT.FINL PR CALL25 2PP  ", "pnl": -60.5}, {"x": 74, "y": -12.57, "name": "GOLDM.S.BK CALL27 DAX    ", "pnl": -68.77}, {"x": 22, "y": -99.99, "name": "UBS TURBOC N100          ", "pnl": -189.09}, {"x": 1, "y": -1.14, "name": "GOLDM.S.BK CALL26 DAX    ", "pnl": -374.11}];
+        const scatterDataEuro = [{"x": 20, "y": 427.68, "name": "WITR MU.AS.I. ETP 62     ", "pct": 3.31}, {"x": 22, "y": 190.82, "name": "HSBC T+B CALL26 ABEA     ", "pct": 21.56}, {"x": 0, "y": 132.63, "name": "VONT.FINL PR CALL25 N100 ", "pct": 1.56}, {"x": 18, "y": 104.42, "name": "VONT.FINL PR CALL26 ABEA ", "pct": 9.99}, {"x": 22, "y": 42.43, "name": "VANG.FTSE A.W. DLA", "pct": 1.51}, {"x": 7, "y": 36.02, "name": "HSBC T+B TURBOC ABEA     ", "pct": 65.49}, {"x": 0, "y": 34.9, "name": "VONT.FINL PR CALL25 DAX  ", "pct": 0.7}, {"x": 62, "y": 32.78, "name": "MS CO.I. CALL26 ABEA     ", "pct": 0.29}, {"x": 7, "y": 30.8, "name": "CANAAN INC SP.ADR CL.A", "pct": 24.41}, {"x": 0, "y": 27.55, "name": "HSBC T+B CALL27 ABEA", "pct": 0.55}, {"x": 1, "y": 16.05, "name": "VONT.FINL PR TURBOC ABEA ", "pct": 1.89}, {"x": 0, "y": 13.35, "name": "VONT.FINL PR CALL25 DAX  ", "pct": 0.27}, {"x": 36, "y": 9.57, "name": "SPDR MSCI ACW IM ETF", "pct": 1.43}, {"x": 33, "y": 9.37, "name": "MS CO.I. CALL25 DAX      ", "pct": 4.32}, {"x": 4, "y": 8.29, "name": "GOLDM.S.BK CALL25 NOV    ", "pct": 9.47}, {"x": 0, "y": 6.49, "name": "HSBC T+B TURBOC ABEA     ", "pct": 17.08}, {"x": 1, "y": 5.29, "name": "WITR MU.AS.I.RUSS.ETP2062", "pct": 0.32}, {"x": 0, "y": 5.13, "name": "HSBC T+B TURBOC UNH      ", "pct": 0.86}, {"x": 7, "y": 4.78, "name": "MS CO.I. CALL25 XAU      ", "pct": 0.09}, {"x": 1, "y": 1.94, "name": "NVIDIA CORP. DL-,001", "pct": 0.97}, {"x": 0, "y": 1.2, "name": "VONT.FINL PR TURBOC N100 ", "pct": 0.02}, {"x": 0, "y": -0.04, "name": "UBS TURBOP N100          ", "pct": -0.13}, {"x": 1, "y": -0.77, "name": "VONT.FINL PR MINIL DAX   ", "pct": -0.02}, {"x": 0, "y": -0.9, "name": "BERKSH. H.B NEW DL-,00333", "pct": -0.1}, {"x": 0, "y": -2.0, "name": "UBS TURBOC25 N100        ", "pct": -0.05}, {"x": 0, "y": -3.18, "name": "HSBC T+B TURBOC N100     ", "pct": -1.68}, {"x": 1, "y": -4.56, "name": "HSBC T+B CALL27 N100     ", "pct": -0.94}, {"x": 10, "y": -4.71, "name": "MUF-AMU.EOSTXX50 2XLEV.AC", "pct": -0.08}, {"x": 0, "y": -5.0, "name": "MS CO.I. TURBOL ABEA     ", "pct": -1.51}, {"x": 0, "y": -6.5, "name": "UNITEDHEALTH GROUP DL-,01", "pct": -0.26}, {"x": 12, "y": -8.31, "name": "HSBC T+B INTRAD          ", "pct": -99.88}, {"x": 3, "y": -9.4, "name": "ALPHABET INC.CL.C DL-,001", "pct": -1.25}, {"x": 0, "y": -10.47, "name": "VONT.FINL PR TURBOC ABEA ", "pct": -0.26}, {"x": 3, "y": -12.96, "name": "BITCOIN GROUP SE O.N.", "pct": -2.52}, {"x": 1, "y": -14.45, "name": "MS CO.I. CALL25 ABEA     ", "pct": -0.14}, {"x": 29, "y": -27.74, "name": "MS CO.I. TURBOL SX5E     ", "pct": -14.42}, {"x": 3, "y": -28.43, "name": "VONT.FINL PR CALL25 ABEA ", "pct": -0.17}, {"x": 34, "y": -29.32, "name": "MS CO.I. CALL25 ABEA     ", "pct": -29.35}, {"x": 37, "y": -29.5, "name": "ISHSIII-CORE MSCI WLD DLA", "pct": -3.79}, {"x": 1, "y": -30.75, "name": "GOLDM.S.BK CALL25 R3NK   ", "pct": -16.27}, {"x": 12, "y": -34.5, "name": "HSBC T+B TURBOC SAP      ", "pct": -98.57}, {"x": 11, "y": -36.14, "name": "HSBC T+B TURBO           ", "pct": -99.97}, {"x": 0, "y": -39.2, "name": "HSBC T+B TURBOC ABEA     ", "pct": -0.78}, {"x": 1, "y": -42.29, "name": "MS CO.I. CALL26 ABEA     ", "pct": -0.42}, {"x": 44, "y": -53.44, "name": "GOLDM.S.BK CALL26 DAX    ", "pct": -4.91}, {"x": 4, "y": -60.5, "name": "VONT.FINL PR CALL25 2PP  ", "pct": -35.59}, {"x": 74, "y": -68.77, "name": "GOLDM.S.BK CALL27 DAX    ", "pct": -12.57}, {"x": 22, "y": -189.09, "name": "UBS TURBOC N100          ", "pct": -99.99}, {"x": 1, "y": -374.11, "name": "GOLDM.S.BK CALL26 DAX    ", "pct": -1.14}];
+
+        // Hold time vs Rendite %
+        const pctCtx = document.getElementById('holdTimePctChart').getContext('2d');
+        new Chart(pctCtx, {
+            type: 'scatter',
+            data: {
+                datasets: [{
+                    label: 'Geschlossene Positionen',
+                    data: scatterDataPct,
+                    backgroundColor: scatterDataPct.map(d => d.y >= 0 ? 'rgba(16, 185, 129, 0.7)' : 'rgba(239, 68, 68, 0.7)'),
+                    borderColor: scatterDataPct.map(d => d.y >= 0 ? '#10b981' : '#ef4444'),
+                    borderWidth: 2,
+                    pointRadius: 8,
+                    pointHoverRadius: 12
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const d = context.raw;
+                                return [d.name, 'Haltedauer: ' + d.x + ' Tage', 'Rendite: ' + d.y.toLocaleString('de-DE') + ' %', 'P&L: ' + d.pnl.toLocaleString('de-DE') + ' €'];
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Haltedauer (Tage)', color: '#888' },
+                        ticks: { color: '#666' },
+                        grid: { color: 'rgba(255,255,255,0.05)' }
+                    },
+                    y: {
+                        title: { display: true, text: 'Rendite (%)', color: '#888' },
+                        ticks: {
+                            color: '#666',
+                            callback: function(value) { return value.toLocaleString('de-DE') + ' %'; }
+                        },
+                        grid: { color: 'rgba(255,255,255,0.05)' }
+                    }
+                }
+            }
+        });
+
+        // Hold time vs Rendite €
+        const euroCtx = document.getElementById('holdTimeEuroChart').getContext('2d');
+        new Chart(euroCtx, {
+            type: 'scatter',
+            data: {
+                datasets: [{
+                    label: 'Geschlossene Positionen',
+                    data: scatterDataEuro,
+                    backgroundColor: scatterDataEuro.map(d => d.y >= 0 ? 'rgba(16, 185, 129, 0.7)' : 'rgba(239, 68, 68, 0.7)'),
+                    borderColor: scatterDataEuro.map(d => d.y >= 0 ? '#10b981' : '#ef4444'),
+                    borderWidth: 2,
+                    pointRadius: 8,
+                    pointHoverRadius: 12
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const d = context.raw;
+                                return [d.name, 'Haltedauer: ' + d.x + ' Tage', 'P&L: ' + d.y.toLocaleString('de-DE') + ' €', 'Rendite: ' + d.pct.toLocaleString('de-DE') + ' %'];
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Haltedauer (Tage)', color: '#888' },
+                        ticks: { color: '#666' },
+                        grid: { color: 'rgba(255,255,255,0.05)' }
+                    },
+                    y: {
+                        title: { display: true, text: 'Rendite (€)', color: '#888' },
+                        ticks: {
+                            color: '#666',
+                            callback: function(value) { return value.toLocaleString('de-DE') + ' €'; }
+                        },
+                        grid: { color: 'rgba(255,255,255,0.05)' }
+                    }
+                }
+            }
+        });
+    </script>
 </body>
 </html>
