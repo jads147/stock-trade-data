@@ -1,2 +1,11 @@
+# Personal data files
 Kontoauszug.pdf
-__pycache__/parse_trades.cpython-314.pyc
+*.pdf
+ZERO-*.csv
+
+# Generated output
+trades_overview.html
+
+# Python
+__pycache__/
+*.pyc
