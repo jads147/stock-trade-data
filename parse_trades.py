@@ -38,6 +38,14 @@ def parse_german_number(value: str) -> float:
         return 0.0
 
 
+def format_german_number(value: float, decimals: int = 2) -> str:
+    """Format number to German format (1234.56 -> 1.234,56)"""
+    formatted = f"{value:,.{decimals}f}"
+    # Swap . and , for German format
+    formatted = formatted.replace(",", "X").replace(".", ",").replace("X", ".")
+    return formatted
+
+
 def parse_german_date(value: str) -> datetime:
     """Parse German date format (DD.MM.YYYY)"""
     try:
@@ -484,27 +492,27 @@ def generate_html(transactions: list[Transaction], output_path: str):
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-label">Einzahlungen</div>
-                <div class="stat-value positive">{total_einzahlung:,.2f} €</div>
+                <div class="stat-value positive">{format_german_number(total_einzahlung)} €</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">Auszahlungen</div>
-                <div class="stat-value negative">{total_auszahlung:,.2f} €</div>
+                <div class="stat-value negative">{format_german_number(total_auszahlung)} €</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">Realisierte P&L</div>
-                <div class="stat-value {'positive' if total_realized_pnl >= 0 else 'negative'}">{'+' if total_realized_pnl >= 0 else ''}{total_realized_pnl:,.2f} €</div>
+                <div class="stat-value {'positive' if total_realized_pnl >= 0 else 'negative'}">{'+' if total_realized_pnl >= 0 else ''}{format_german_number(total_realized_pnl)} €</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">Investiert (offen)</div>
-                <div class="stat-value neutral">{total_invested_open:,.2f} €</div>
+                <div class="stat-value neutral">{format_german_number(total_invested_open)} €</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">Steuerausgleich</div>
-                <div class="stat-value positive">+{total_steuerausgleich:,.2f} €</div>
+                <div class="stat-value positive">+{format_german_number(total_steuerausgleich)} €</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">Dividenden</div>
-                <div class="stat-value positive">+{total_dividenden:,.2f} €</div>
+                <div class="stat-value positive">+{format_german_number(total_dividenden)} €</div>
             </div>
         </div>
 
@@ -531,10 +539,10 @@ def generate_html(transactions: list[Transaction], output_path: str):
         html += f"""                    <tr>
                         <td class="isin">{item["isin"]}</td>
                         <td class="name" title="{item["name"]}">{item["name"][:40]}</td>
-                        <td class="text-right mono">{item["open_stueck"]:,.2f}</td>
-                        <td class="text-right mono">{item.get("avg_kauf_preis", 0):,.2f} €</td>
-                        <td class="text-right mono">{item.get("invested", 0):,.2f} €</td>
-                        <td class="text-right mono {realized_class}">{realized_sign}{realized:,.2f} €</td>
+                        <td class="text-right mono">{format_german_number(item["open_stueck"])}</td>
+                        <td class="text-right mono">{format_german_number(item.get("avg_kauf_preis", 0))} €</td>
+                        <td class="text-right mono">{format_german_number(item.get("invested", 0))} €</td>
+                        <td class="text-right mono {realized_class}">{realized_sign}{format_german_number(realized)} €</td>
                     </tr>
 """
 
@@ -567,9 +575,9 @@ def generate_html(transactions: list[Transaction], output_path: str):
                         <td class="name" title="{item["name"]}">{item["name"][:40]}</td>
                         <td class="text-right mono">{item["kauf_count"]}</td>
                         <td class="text-right mono">{item["verkauf_count"]}</td>
-                        <td class="text-right mono negative">{item["kauf_sum"]:,.2f} €</td>
-                        <td class="text-right mono positive">+{item["verkauf_sum"]:,.2f} €</td>
-                        <td class="text-right mono {pnl_class}">{pnl_sign}{item["pnl"]:,.2f} €</td>
+                        <td class="text-right mono negative">{format_german_number(item["kauf_sum"])} €</td>
+                        <td class="text-right mono positive">+{format_german_number(item["verkauf_sum"])} €</td>
+                        <td class="text-right mono {pnl_class}">{pnl_sign}{format_german_number(item["pnl"])} €</td>
                     </tr>
 """
 
@@ -604,8 +612,8 @@ def generate_html(transactions: list[Transaction], output_path: str):
                             <td><span class="badge {typ_badge}">{typ_text}</span></td>
                             <td class="isin">{t.isin}</td>
                             <td class="name" title="{t.name}">{t.name[:35]}</td>
-                            <td class="text-right mono">{t.stueck:,.2f}</td>
-                            <td class="text-right mono {betrag_class}">{betrag_sign}{t.betrag:,.2f} €</td>
+                            <td class="text-right mono">{format_german_number(t.stueck)}</td>
+                            <td class="text-right mono {betrag_class}">{betrag_sign}{format_german_number(t.betrag)} €</td>
                         </tr>
 """
 
