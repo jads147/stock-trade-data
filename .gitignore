@@ -10,3 +10,4 @@ trades_overview.html
 __pycache__/
 *.pyc
 .claude/
+trades_overview.html
