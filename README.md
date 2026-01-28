@@ -27,6 +27,8 @@ A Python tool for parsing and visualizing stock trade data from German brokers. 
 
 ## Installation
 
+Right click the cloned folder and open in Terminal:
+
 ```bash
 pip install -r requirements.txt
 ```
