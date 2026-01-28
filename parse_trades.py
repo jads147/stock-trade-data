@@ -357,7 +357,7 @@ def generate_html(transactions: list[Transaction], output_path: str):
         /* Stats Cards */
         .stats-grid {{
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
             gap: 20px;
             margin-bottom: 40px;
         }}
@@ -570,6 +570,12 @@ def generate_html(transactions: list[Transaction], output_path: str):
 
         <div class="section">
             <h2>📊 Trade Volume</h2>
+            <div style="margin-bottom: 15px;">
+                <label style="display: inline-flex; align-items: center; cursor: pointer; color: #888; font-size: 0.9rem;">
+                    <input type="checkbox" id="logScaleToggle" style="margin-right: 8px; cursor: pointer;">
+                    Logarithmische Skala
+                </label>
+            </div>
             <div class="chart-grid">
                 <div>
                     <h3 style="color: #888; font-size: 0.9rem; margin-bottom: 10px;">Volume pro Monat</h3>
@@ -882,7 +888,7 @@ def generate_html(transactions: list[Transaction], output_path: str):
 
         // Volume per Month Chart
         const volumeMonthCtx = document.getElementById('volumeMonthChart').getContext('2d');
-        new Chart(volumeMonthCtx, {{
+        const volumeMonthChart = new Chart(volumeMonthCtx, {{
             type: 'bar',
             data: {{
                 labels: volumeMonthData.labels.map(m => {{
@@ -944,7 +950,7 @@ def generate_html(transactions: list[Transaction], output_path: str):
 
         // Volume per Weekday Chart
         const volumeWeekdayCtx = document.getElementById('volumeWeekdayChart').getContext('2d');
-        new Chart(volumeWeekdayCtx, {{
+        const volumeWeekdayChart = new Chart(volumeWeekdayCtx, {{
             type: 'bar',
             data: {{
                 labels: volumeWeekdayData.labels,
@@ -998,6 +1004,54 @@ def generate_html(transactions: list[Transaction], output_path: str):
                     }}
                 }}
             }}
+        }});
+
+        // Log scale toggle
+        document.getElementById('logScaleToggle').addEventListener('change', function() {{
+            const isLog = this.checked;
+            const scaleType = isLog ? 'logarithmic' : 'linear';
+
+            volumeMonthChart.options.scales.y.type = scaleType;
+            volumeWeekdayChart.options.scales.y.type = scaleType;
+
+            if (isLog) {{
+                volumeMonthChart.options.scales.y.min = 1;
+                volumeWeekdayChart.options.scales.y.min = 1;
+                // Log-friendly ticks
+                volumeMonthChart.options.scales.y.ticks = {{
+                    color: '#666',
+                    callback: function(value) {{
+                        if (value === 1 || value === 10 || value === 100 || value === 1000 || value === 10000 || value === 100000) {{
+                            return value.toLocaleString('de-DE') + ' €';
+                        }}
+                        return '';
+                    }}
+                }};
+                volumeWeekdayChart.options.scales.y.ticks = {{
+                    color: '#666',
+                    callback: function(value) {{
+                        if (value === 1 || value === 10 || value === 100 || value === 1000 || value === 10000 || value === 100000) {{
+                            return value.toLocaleString('de-DE') + ' €';
+                        }}
+                        return '';
+                    }}
+                }};
+            }} else {{
+                delete volumeMonthChart.options.scales.y.min;
+                delete volumeWeekdayChart.options.scales.y.min;
+                // Linear ticks
+                volumeMonthChart.options.scales.y.ticks = {{
+                    color: '#666',
+                    callback: function(value) {{ return value.toLocaleString('de-DE') + ' €'; }}
+                }};
+                volumeWeekdayChart.options.scales.y.ticks = {{
+                    color: '#666',
+                    callback: function(value) {{ return value.toLocaleString('de-DE') + ' €'; }}
+                }};
+            }}
+
+            volumeMonthChart.update();
+            volumeWeekdayChart.update();
         }});
 
         // P&L Over Time Chart
