@@ -235,6 +235,32 @@
                 <div class="stat-label">Dividenden</div>
                 <div class="stat-value positive">+1,57 €</div>
             </div>
+            <div class="stat-card">
+                <div class="stat-label">Trade Volume (gesamt)</div>
+                <div class="stat-value neutral">407.615,47 €</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Anzahl Trades</div>
+                <div class="stat-value neutral">214</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>📊 Trade Volume</h2>
+            <div class="chart-grid">
+                <div>
+                    <h3 style="color: #888; font-size: 0.9rem; margin-bottom: 10px;">Volume pro Monat</h3>
+                    <div class="chart-container">
+                        <canvas id="volumeMonthChart"></canvas>
+                    </div>
+                </div>
+                <div>
+                    <h3 style="color: #888; font-size: 0.9rem; margin-bottom: 10px;">Volume pro Wochentag</h3>
+                    <div class="chart-container">
+                        <canvas id="volumeWeekdayChart"></canvas>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="section">
@@ -2614,6 +2640,130 @@
 
                 rows.forEach(row => tbody.appendChild(row));
             });
+        });
+
+        // Volume Charts
+        const volumeMonthData = {"labels": ["2025-03", "2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01"], "kauf": [1186.91, 16252.26, 170365.86, 7514.7, 5069.7, 1641.09, 0.0, 1819.5, 153.3, 0.0, 2075.29], "verkauf": [186.3, 13222.67, 174514.01, 2231.21, 4933.23, 1778.81, 478.27, 2011.35, 1191.15, 485.04, 504.82], "count": [7, 29, 93, 30, 22, 6, 1, 18, 3, 1, 4]};
+        const volumeWeekdayData = {"labels": ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"], "kauf": [29881.23, 46935.87, 28593.02, 44928.19, 55740.3, 0.0, 0.0], "verkauf": [31925.21, 42560.29, 22660.48, 47105.33, 57285.55, 0.0, 0.0], "count": [59, 45, 31, 41, 38, 0, 0]};
+
+        // Volume per Month Chart
+        const volumeMonthCtx = document.getElementById('volumeMonthChart').getContext('2d');
+        new Chart(volumeMonthCtx, {
+            type: 'bar',
+            data: {
+                labels: volumeMonthData.labels.map(m => {
+                    const [year, month] = m.split('-');
+                    const date = new Date(year, month - 1);
+                    return date.toLocaleDateString('de-DE', { month: 'short', year: '2-digit' });
+                }),
+                datasets: [
+                    {
+                        label: 'Käufe',
+                        data: volumeMonthData.kauf,
+                        backgroundColor: 'rgba(239, 68, 68, 0.7)',
+                        borderColor: '#ef4444',
+                        borderWidth: 1
+                    },
+                    {
+                        label: 'Verkäufe',
+                        data: volumeMonthData.verkauf,
+                        backgroundColor: 'rgba(16, 185, 129, 0.7)',
+                        borderColor: '#10b981',
+                        borderWidth: 1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        labels: { color: '#888' }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            afterBody: function(context) {
+                                const idx = context[0].dataIndex;
+                                return 'Trades: ' + volumeMonthData.count[idx];
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        stacked: false,
+                        ticks: { color: '#666' },
+                        grid: { color: 'rgba(255,255,255,0.05)' }
+                    },
+                    y: {
+                        stacked: false,
+                        ticks: {
+                            color: '#666',
+                            callback: function(value) { return value.toLocaleString('de-DE') + ' €'; }
+                        },
+                        grid: { color: 'rgba(255,255,255,0.05)' }
+                    }
+                }
+            }
+        });
+
+        // Volume per Weekday Chart
+        const volumeWeekdayCtx = document.getElementById('volumeWeekdayChart').getContext('2d');
+        new Chart(volumeWeekdayCtx, {
+            type: 'bar',
+            data: {
+                labels: volumeWeekdayData.labels,
+                datasets: [
+                    {
+                        label: 'Käufe',
+                        data: volumeWeekdayData.kauf,
+                        backgroundColor: 'rgba(239, 68, 68, 0.7)',
+                        borderColor: '#ef4444',
+                        borderWidth: 1
+                    },
+                    {
+                        label: 'Verkäufe',
+                        data: volumeWeekdayData.verkauf,
+                        backgroundColor: 'rgba(16, 185, 129, 0.7)',
+                        borderColor: '#10b981',
+                        borderWidth: 1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        labels: { color: '#888' }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            afterBody: function(context) {
+                                const idx = context[0].dataIndex;
+                                return 'Trades: ' + volumeWeekdayData.count[idx];
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        stacked: false,
+                        ticks: { color: '#666' },
+                        grid: { color: 'rgba(255,255,255,0.05)' }
+                    },
+                    y: {
+                        stacked: false,
+                        ticks: {
+                            color: '#666',
+                            callback: function(value) { return value.toLocaleString('de-DE') + ' €'; }
+                        },
+                        grid: { color: 'rgba(255,255,255,0.05)' }
+                    }
+                }
+            }
         });
 
         // P&L Over Time Chart

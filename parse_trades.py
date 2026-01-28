@@ -195,6 +195,31 @@ def generate_html(transactions: list[Transaction], output_path: str):
     total_einzahlung = sum(t.betrag for t in einzahlungen)
     total_auszahlung = sum(t.betrag for t in auszahlungen)
 
+    # Calculate trade volume statistics
+    total_volume = sum(abs(t.betrag) for t in trades)
+    total_trades_count = len(trades)
+
+    # Volume per month
+    volume_by_month = defaultdict(lambda: {"kauf": 0.0, "verkauf": 0.0, "count": 0})
+    for t in trades:
+        month_key = t.datum.strftime("%Y-%m")
+        if t.is_kauf:
+            volume_by_month[month_key]["kauf"] += abs(t.betrag)
+        else:
+            volume_by_month[month_key]["verkauf"] += abs(t.betrag)
+        volume_by_month[month_key]["count"] += 1
+
+    # Volume per weekday (0=Monday, 6=Sunday)
+    volume_by_weekday = defaultdict(lambda: {"kauf": 0.0, "verkauf": 0.0, "count": 0})
+    weekday_names = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+    for t in trades:
+        weekday = t.datum.weekday()
+        if t.is_kauf:
+            volume_by_weekday[weekday]["kauf"] += abs(t.betrag)
+        else:
+            volume_by_weekday[weekday]["verkauf"] += abs(t.betrag)
+        volume_by_weekday[weekday]["count"] += 1
+
     # Group trades by ISIN with quantity tracking (Orders + Sparpläne + Bruchstücke)
     trades_by_isin = {}
     for t in trades:
@@ -533,6 +558,32 @@ def generate_html(transactions: list[Transaction], output_path: str):
                 <div class="stat-label">Dividenden</div>
                 <div class="stat-value positive">+{format_german_number(total_dividenden)} €</div>
             </div>
+            <div class="stat-card">
+                <div class="stat-label">Trade Volume (gesamt)</div>
+                <div class="stat-value neutral">{format_german_number(total_volume)} €</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Anzahl Trades</div>
+                <div class="stat-value neutral">{total_trades_count}</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>📊 Trade Volume</h2>
+            <div class="chart-grid">
+                <div>
+                    <h3 style="color: #888; font-size: 0.9rem; margin-bottom: 10px;">Volume pro Monat</h3>
+                    <div class="chart-container">
+                        <canvas id="volumeMonthChart"></canvas>
+                    </div>
+                </div>
+                <div>
+                    <h3 style="color: #888; font-size: 0.9rem; margin-bottom: 10px;">Volume pro Wochentag</h3>
+                    <div class="chart-container">
+                        <canvas id="volumeWeekdayChart"></canvas>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="section">
@@ -808,7 +859,147 @@ def generate_html(transactions: list[Transaction], output_path: str):
             "pct": round(rendite_pct, 2)
         })
 
+    # Generate volume chart data
+    sorted_months = sorted(volume_by_month.keys())
+    volume_month_data = {
+        "labels": sorted_months,
+        "kauf": [round(volume_by_month[m]["kauf"], 2) for m in sorted_months],
+        "verkauf": [round(volume_by_month[m]["verkauf"], 2) for m in sorted_months],
+        "count": [volume_by_month[m]["count"] for m in sorted_months]
+    }
+
+    volume_weekday_data = {
+        "labels": weekday_names,
+        "kauf": [round(volume_by_weekday[i]["kauf"], 2) for i in range(7)],
+        "verkauf": [round(volume_by_weekday[i]["verkauf"], 2) for i in range(7)],
+        "count": [volume_by_weekday[i]["count"] for i in range(7)]
+    }
+
     html += f"""
+        // Volume Charts
+        const volumeMonthData = {json.dumps(volume_month_data)};
+        const volumeWeekdayData = {json.dumps(volume_weekday_data)};
+
+        // Volume per Month Chart
+        const volumeMonthCtx = document.getElementById('volumeMonthChart').getContext('2d');
+        new Chart(volumeMonthCtx, {{
+            type: 'bar',
+            data: {{
+                labels: volumeMonthData.labels.map(m => {{
+                    const [year, month] = m.split('-');
+                    const date = new Date(year, month - 1);
+                    return date.toLocaleDateString('de-DE', {{ month: 'short', year: '2-digit' }});
+                }}),
+                datasets: [
+                    {{
+                        label: 'Käufe',
+                        data: volumeMonthData.kauf,
+                        backgroundColor: 'rgba(239, 68, 68, 0.7)',
+                        borderColor: '#ef4444',
+                        borderWidth: 1
+                    }},
+                    {{
+                        label: 'Verkäufe',
+                        data: volumeMonthData.verkauf,
+                        backgroundColor: 'rgba(16, 185, 129, 0.7)',
+                        borderColor: '#10b981',
+                        borderWidth: 1
+                    }}
+                ]
+            }},
+            options: {{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {{
+                    legend: {{
+                        display: true,
+                        labels: {{ color: '#888' }}
+                    }},
+                    tooltip: {{
+                        callbacks: {{
+                            afterBody: function(context) {{
+                                const idx = context[0].dataIndex;
+                                return 'Trades: ' + volumeMonthData.count[idx];
+                            }}
+                        }}
+                    }}
+                }},
+                scales: {{
+                    x: {{
+                        stacked: false,
+                        ticks: {{ color: '#666' }},
+                        grid: {{ color: 'rgba(255,255,255,0.05)' }}
+                    }},
+                    y: {{
+                        stacked: false,
+                        ticks: {{
+                            color: '#666',
+                            callback: function(value) {{ return value.toLocaleString('de-DE') + ' €'; }}
+                        }},
+                        grid: {{ color: 'rgba(255,255,255,0.05)' }}
+                    }}
+                }}
+            }}
+        }});
+
+        // Volume per Weekday Chart
+        const volumeWeekdayCtx = document.getElementById('volumeWeekdayChart').getContext('2d');
+        new Chart(volumeWeekdayCtx, {{
+            type: 'bar',
+            data: {{
+                labels: volumeWeekdayData.labels,
+                datasets: [
+                    {{
+                        label: 'Käufe',
+                        data: volumeWeekdayData.kauf,
+                        backgroundColor: 'rgba(239, 68, 68, 0.7)',
+                        borderColor: '#ef4444',
+                        borderWidth: 1
+                    }},
+                    {{
+                        label: 'Verkäufe',
+                        data: volumeWeekdayData.verkauf,
+                        backgroundColor: 'rgba(16, 185, 129, 0.7)',
+                        borderColor: '#10b981',
+                        borderWidth: 1
+                    }}
+                ]
+            }},
+            options: {{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {{
+                    legend: {{
+                        display: true,
+                        labels: {{ color: '#888' }}
+                    }},
+                    tooltip: {{
+                        callbacks: {{
+                            afterBody: function(context) {{
+                                const idx = context[0].dataIndex;
+                                return 'Trades: ' + volumeWeekdayData.count[idx];
+                            }}
+                        }}
+                    }}
+                }},
+                scales: {{
+                    x: {{
+                        stacked: false,
+                        ticks: {{ color: '#666' }},
+                        grid: {{ color: 'rgba(255,255,255,0.05)' }}
+                    }},
+                    y: {{
+                        stacked: false,
+                        ticks: {{
+                            color: '#666',
+                            callback: function(value) {{ return value.toLocaleString('de-DE') + ' €'; }}
+                        }},
+                        grid: {{ color: 'rgba(255,255,255,0.05)' }}
+                    }}
+                }}
+            }}
+        }});
+
         // P&L Over Time Chart
         const pnlTimeline = {json.dumps(pnl_timeline)};
 
